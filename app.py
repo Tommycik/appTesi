@@ -67,7 +67,7 @@ def base_layout(title: str, content: Html().Any, scripts: Html().Any = None, nav
     return Html(
     Html(
             Head(
-                Html(Meta(charset="UTF-8")),
+            Html(Meta(charset="UTF-8")),
                 Html(Meta(name="viewport", content="width=device-width, initial-scale=1.0")),
                 Html(Title(f"Interactive Flask App - {title}")),
                 Html(Link(rel="stylesheet", href=url_for('static', filename='css/style.css'))),
@@ -78,30 +78,38 @@ def base_layout(title: str, content: Html().Any, scripts: Html().Any = None, nav
                 Html(Header(
                         Html(Nav(navigation, class_="container"))
                     )
-            ),
-            Html(
-                Main(
-                    Html(Div(content, class_="container"))
-                )
-            ),
-            html.Footer(
-                html.P("&copy; 2025 Interactive Flask App")
-            ),
-            html.Script(src=url_for('static', filename='js/script.js')),
-            scripts or "", # Add page-specific scripts if provided
+                ),
+                Html(
+                    Main(
+                        Html(Div(content, class_="container"))
+                    )
+                ),
+                Html(
+                    Footer(
+                        Html(P("&copy; 2025 Interactive Flask App"))
+                    )
+                ),
+                Html(Script(src=url_for('static', filename='js/script.js'))),
+                scripts or "", # Add page-specific scripts if provided
+            )
         )
     )
+
 @app.route('/')
 # ‘/’ URL is bound with hello_world() function.
 def index():
     is_connected = session.get('lambda_connected', False)
-    action_button_section = html.Div()
+    action_button_section = Html(Div())
     if not is_connected:
         # If NOT connected (or connection failed), show the "Connect" button.
-        action_button_section = html.Div(
-            html.P("Please initialize your Lambda Cloud connection and ensure the Docker image is ready."),
-            html.P(
-                html.A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_="button-link")
+        action_button_section = Html(
+            Div(
+            Html(P("Please initialize your Lambda Cloud connection and ensure the Docker image is ready.")),
+                Html(
+                    P(
+                        Html(A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_="button-link"))
+                    )
+                )
             )
         )
     else:
