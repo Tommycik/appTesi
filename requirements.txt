@@ -2,4 +2,4 @@ Flask
 requests
 python-dotenv
 paramiko
-fast-html
+fasthtml

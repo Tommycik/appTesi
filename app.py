@@ -1,12 +1,13 @@
 # Importing flask module in the project is mandatory
 # An object of Flask class is our WSGI application.
-from flask import Flask, url_for, request, redirect, flash, session
+from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, make_response, jsonify # ADDED get_flashed_messages
 import os
 import sys
 import requests
 from dotenv import load_dotenv
 import paramiko # For SSHing into Lambda instance
 from fasthtml.common import *
+from typing import Any
 # Import fast_html components
 
 # Load environment variables from .env file
@@ -55,43 +56,39 @@ def run_ssh_command(ip, username, private_key_path, command):
 # --- Helper function for flashing messages ---
 def get_flashed_html_messages():
     messages_html = []
-    for category, message in flash.get_flashed_messages(with_categories=True):
+    for category, message in get_flashed_messages(with_categories=True):
         messages_html.append(
-            Html(Div(message, class_=f"alert alert-{category}"))
+            Div(message, class_=f"alert alert-{category}")
         )
     if messages_html:
-        return Html(Div(*messages_html, class_="messages"))
+        return Div(*messages_html, class_="messages")
     return ""
 
-def base_layout(title: str, content: Html().Any, scripts: Html().Any = None, navigation : Html().Any = None):
-    return Html(
-    Html(
-            Head(
-            Html(Meta(charset="UTF-8")),
-                Html(Meta(name="viewport", content="width=device-width, initial-scale=1.0")),
-                Html(Title(f"Interactive Flask App - {title}")),
-                Html(Link(rel="stylesheet", href=url_for('static', filename='css/style.css'))),
-            )
+def base_layout(title: str, content: Any, scripts: Any = None, navigation : Any = None):
+    if navigation is None:
+        navigation = Nav(class_="container")  # An empty Nav object
+    else:
+        navigation = Nav(navigation, class_="container")
+
+    return Div(
+    Head(
+            Meta(charset="UTF-8"),
+                Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+                Title(f"Interactive Flask App - {title}"),
+                Link(rel="stylesheet", href=url_for('static', filename='css/style.css'))
         ),
-        Html(
-            Body(
-                Html(Header(
-                        Html(Nav(navigation, class_="container"))
-                    )
+        Body(
+            Header(
+                    navigation
                 ),
-                Html(
-                    Main(
-                        Html(Div(content, class_="container"))
-                    )
+                Main(
+                    Div(content, class_="container")
                 ),
-                Html(
-                    Footer(
-                        Html(P("&copy; 2025 Interactive Flask App"))
-                    )
+                Footer(
+                    P("&copy; 2025 Interactive Flask App")
                 ),
-                Html(Script(src=url_for('static', filename='js/script.js'))),
-                scripts or "", # Add page-specific scripts if provided
-            )
+                Script(src=url_for('static', filename='js/script.js')),
+                scripts or "" # Add page-specific scripts if provided
         )
     )
 
@@ -99,48 +96,52 @@ def base_layout(title: str, content: Html().Any, scripts: Html().Any = None, nav
 # ‘/’ URL is bound with hello_world() function.
 def index():
     is_connected = session.get('lambda_connected', False)
-    action_button_section = Html(Div())
+    action_button_section = Div()
     if not is_connected:
         # If NOT connected (or connection failed), show the "Connect" button.
-        action_button_section = Html(
-            Div(
-            Html(P("Please initialize your Lambda Cloud connection and ensure the Docker image is ready.")),
-                Html(
-                    P(
-                        Html(A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_="button-link"))
-                    )
+        action_button_section =Div(
+            P("Please initialize your Lambda Cloud connection and ensure the Docker image is ready."),
+                P(
+                    A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_="button-link")
                 )
             )
-        )
+
     else:
         # If connected (session['lambda_connected'] is True), show the "Go to Generate" button.
-        action_button_section = html.Div(
-            html.P("Connection established and Docker image pulled. You can now proceed to generate images."),
-            html.P(
-                html.A("Go to the Image Generation Page", href=url_for('inference'), class_="button-link")
-            ),
-            html.P(
-                html.A("Go to the fine tuning Page", href=url_for('training'), class_="button-link")
-            ),
-            html.P(
-                html.A("Go to the results Page", href=url_for('results'), class_="button-link")
-            )
+        action_button_section = Div(
+            P("Connection established and Docker image pulled. You can now proceed to generate images."),
+                P(
+                    A("Go to the Image Generation Page", href=url_for('inference'), class_="button-link")
+                ),
+                P(
+                    A("Go to the fine tuning Page", href=url_for('training'), class_="button-link")
+                ),
+                P(
+                   A("Go to the results Page", href=url_for('results'), class_="button-link")
+                )
         )
-    content = html.Div(
-        html.H1("Welcome to the Lambda ControlNet App!"),
-        html.P("This application allows you to generate images using a Flux ControlNet model running on Lambda Cloud."),
-        html.P("Before proceeding, ensure you have:"),
-        html.Ul(
-            html.Li("A Lambda Cloud account and API Key."),
-            html.Li("An SSH key pair uploaded to Lambda Cloud and the private key accessible locally."),
-            html.Li(
-                f"A running Lambda Cloud instance with Docker installed and SSH accessible at {LAMBDA_INSTANCE_IP}."),
-            html.Li(f"Your Docker image {DOCKER_IMAGE_NAME} pushed to Docker Hub."),
-        ),
-        action_button_section,
-        get_flashed_html_messages()  # Display messages here too if any
+    content = Div(
+        H1("Welcome to the Lambda ControlNet App!"),
+            P("This application allows you to generate images using a Flux ControlNet model running on Lambda Cloud."),
+            P("Before proceeding, ensure you have:"),
+            Ul(
+                Li("A Lambda Cloud account and API Key."),
+                    Li("An SSH key pair uploaded to Lambda Cloud and the private key accessible locally."),
+                    Li(
+                        f"A running Lambda Cloud instance with Docker installed and SSH accessible at {LAMBDA_INSTANCE_IP}."),
+                    Li(f"Your Docker image {DOCKER_IMAGE_NAME} pushed to Docker Hub.")
+            ),
+            action_button_section,
+            get_flashed_html_messages()  # Display messages here too if any
     )
-    return base_layout(title='Connect to Lambda Cloud', content=content)
+
+    # In the index() function:
+    # Get the final HTML string from fasthtml
+
+    # Return it as a tuple: (body, status_code, headers)
+    html_obj = base_layout("Connect to lambda cloud", content)
+    print("DEBUG TYPE OF html_obj:", type(html_obj))
+    return str(html_obj), 200, {'Content-Type': 'text/html'}
 
 @app.route('/connect_lambda')
 def connect_lambda():
@@ -162,7 +163,10 @@ def connect_lambda():
         flash(f'Successfully connected to Lambda and pulled Docker image: {DOCKER_IMAGE_NAME}', 'success')
         session['lambda_connected'] = True
 
-    return redirect(url_for('index')) # Redirect back to index to show status
+    response = make_response((redirect(url_for('index'))))
+    response.mimetype = 'text/html'
+    response.status_code = 200  # Optional
+    return response
 
 @app.route('/inference')
 # ‘/’ URL is bound with hello_world() function.
