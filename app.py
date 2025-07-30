@@ -13,7 +13,9 @@ from typing import Any
 import time #for cache busting
 # Load environment variables from .env file
 load_dotenv()
-
+import threading
+#serializing request to lambda
+inference_lock = threading.Lock()
 # Flask constructor takes the name of
 # current module (__name__) as argument.
 app = Flask(__name__)
@@ -64,6 +66,20 @@ def run_ssh_command(ip, username, private_key_path, command):
     except Exception as e:
         print(f"SSH connection or command execution failed: {e}")
         return None, str(e)
+
+def verify_lambda_connection():
+    """Ping the Lambda instance to verify if it's still connected."""
+    try:
+        command = "echo hello"
+        output, errors = run_ssh_command(
+            LAMBDA_INSTANCE_IP,
+            LAMBDA_INSTANCE_USER,
+            SSH_PRIVATE_KEY_PATH,
+            command
+        )
+        return output.strip() == "hello" and not errors
+    except Exception:
+        return False
 
 # --- Helper function for flashing messages ---
 def get_flashed_html_messages():
@@ -187,65 +203,69 @@ def connect_lambda():
     response.status_code = 200  # Optional
     return response
 
-@app.route('/inference')
+model_map = {
+    "hed": "tommycik/controlFluxAlcolHed",
+    "reduced": "tommycik/controlFluxAlcolReduced",
+    "standard": "tommycik/controlFluxAlcol",
+}
 # ‘/’ URL is bound with hello_world() function.
+@app.route('/inference', methods=["GET", "POST"])
 def inference():
-    @app.route('/inference')
-    def inference():
-        content = Div(
-            H2("Choose Inference Mode"),
-            Ul(
-                Li(A("ControlNet", href=url_for('inference_controlnet'))),
-                Li(A("ControlNet Reduced", href=url_for('inference_controlnet_reduced'))),
-                Li(A("ControlNet HED", href=url_for('inference_controlnet_hed')))
-            )
-        )
-        html_obj = base_layout("Inference Selection", content, navigation=A("Back to Home", href=url_for('index')))
-        return str(html_obj), 200, {'Content-Type': 'text/html'}
-@app.route('/inference/controlnet')
-# ‘/’ URL is bound with hello_world() function.
-def inference_controlnet():
-    return
-@app.route('/inference/controlnetReduced')
-# ‘/’ URL is bound with hello_world() function.
-def inference_controlnet_reduced():
-    return
-
-# ‘/’ URL is bound with hello_world() function.
-@app.route('/inference/controlnetHed', methods=["GET", "POST"])
-def inference_controlnet_hed():
+    if not verify_lambda_connection():
+        session['lambda_connected'] = False
+        flash("Lost connection to Lambda Cloud. Please reconnect.", "error")
+        return redirect(url_for('index'))
     if request.method == "POST":
         prompt = request.form['prompt']
         scale = request.form.get('scale', 0.2)
         steps = request.form.get('steps', 50)
         guidance = request.form.get('guidance', 6.0)
+        model = request.form.get('model', 'standard')
+        if not inference_lock.acquire(blocking=False):
+            return jsonify({"error": "Inference is already running. Please wait."}), 429
 
-        # Call Lambda via SSH
-        command = (
-            f"CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
-            f"HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
-            f"CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
-            f"CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} "
-            f"python3 controlnet_infer_api.py "
-            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance}"
-        )
-        output, errors = run_ssh_command(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH, command)
+        try:
+            model_type = "canny"
+            N4 = False
+            if model == "hed":
+                model_type = "hed"
+            elif model == "reduced":
+                N4 = True
 
-        result_url = None
-        if output and "https" in output:
-            result_url = output.strip()
+            # Call Lambda via SSH
+            command = (
+                f"CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
+                f"HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
+                f"CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
+                f"CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} "
+                f"python3 controlnet_infer_api.py "
+                f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_map[model]} --N4 {N4} --controlnet_type {model_type}"
+            )
+            output, errors = run_ssh_command(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH, command)
 
-        content = Div(
-            H2("Inference Result"),
-            P(f"Prompt: {prompt}"),
-            P(f"Result:"),
-            Img(src=result_url, style="max-width: 500px;") if result_url else P("Error during inference."),
-            P(A("Back to Form", href=url_for('inference_controlnet_hed')))
-        )
+            result_url = None
+            if output and "https" in output:
+                result_url = output.strip()
+
+            content = Div(
+                H2("Inference Result"),
+                P(f"Prompt: {prompt}"),
+                P(f"Result:"),
+                Img(src=result_url, style="max-width: 500px;") if result_url else P("Error during inference."),
+                P(A("Back to Form", href=url_for('inference_controlnet_hed')))
+            )
+        finally:
+            inference_lock.release()
         return str(base_layout("Result", content, navigation=A("Back to Home", href=url_for('index')))), 200
 
     # GET method: render form
     form = Form(
+        Select(
+            Option("ControlNet HED", value="hed"),
+            Option("ControlNet Canny reduced", value="reduced"),
+            Option("ControlNet Canny", value="standard"),
+            id="model"
+        ),
         Label("Prompt:"),
         Input(type="text", name="prompt", required=True),
         Label("Conditioning Scale (0.2):"),
