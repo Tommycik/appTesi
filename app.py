@@ -1,5 +1,6 @@
 # Importing flask module in the project is mandatory
 # An object of Flask class is our WSGI application.
+import cloudinary
 from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, make_response, jsonify # ADDED get_flashed_messages
 import os
 import sys
@@ -9,7 +10,7 @@ import paramiko # For SSHing into Lambda instance
 from fasthtml.common import *
 from typing import Any
 # Import fast_html components
-
+import time #for cache busting
 # Load environment variables from .env file
 load_dotenv()
 
@@ -26,8 +27,19 @@ LAMBDA_CLOUD_SSH_KEY_NAME = os.getenv('LAMBDA_CLOUD_SSH_KEY_NAME')
 LAMBDA_INSTANCE_IP = os.getenv('LAMBDA_INSTANCE_IP', "YOUR_LAMBDA_INSTANCE_PUBLIC_IP")
 LAMBDA_INSTANCE_USER = os.getenv('LAMBDA_INSTANCE_USER', "ubuntu")
 SSH_PRIVATE_KEY_PATH = os.getenv('SSH_PRIVATE_KEY_PATH')
+HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
 DOCKER_IMAGE_NAME = os.getenv('DOCKER_IMAGE_NAME', "your-dockerhub-username/controlnet-generator:latest")
 REGION = "us-west-1"
+
+CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
+CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY')
+CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
+
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET
+)
 # the associated function.
 # --- SSH Utilities (Same as before) ---
 def run_ssh_command(ip, username, private_key_path, command):
@@ -65,30 +77,37 @@ def get_flashed_html_messages():
     return ""
 
 def base_layout(title: str, content: Any, scripts: Any = None, navigation : Any = None):
+    # Default navigation if none is provided
+    cache_buster = int(time.time())  # Current Unix timestamp
     if navigation is None:
-        navigation = Nav(class_="container")  # An empty Nav object
+        navigation = Nav(
+            A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_= "nav-link"),
+            A("Connect to Lambda & Pull Drrrrocker Image", href=url_for('connect_lambda'), class_="nav-link")
+        ,class_="main-nav")
     else:
-        navigation = Nav(navigation, class_="container")
+        # If navigation is provided, ensure it's wrapped in a Nav and has the class
+        navigation = Nav(navigation, class_="main-nav")
 
     return Div(
-    Head(
+        Head(
             Meta(charset="UTF-8"),
-                Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
-                Title(f"Interactive Flask App - {title}"),
-                Link(rel="stylesheet", href=url_for('static', filename='css/style.css'))
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+            Title(f"Interactive Flask App - {title}"),
+            Link(rel="stylesheet", href=url_for('static', filename='css/style.css', v=cache_buster))
         ),
         Body(
             Header(
-                    navigation
-                ),
-                Main(
-                    Div(content, class_="container")
-                ),
-                Footer(
-                    P("&copy; 2025 Interactive Flask App")
-                ),
-                Script(src=url_for('static', filename='js/script.js')),
-                scripts or "" # Add page-specific scripts if provided
+                H1("ControlNet App", class_="site-title"),
+                navigation,
+            ),
+            Main(
+                Div(content, class_="container")
+            ),
+            Footer(
+                P("2025 Lambda ControlNet App. All rights reserved.")
+            ),
+            Script(src=url_for('static', filename='js/script.js')),
+            scripts or "" # Add page-specific scripts if provided
         )
     )
 
@@ -171,8 +190,18 @@ def connect_lambda():
 @app.route('/inference')
 # ‘/’ URL is bound with hello_world() function.
 def inference():
-    return
-
+    @app.route('/inference')
+    def inference():
+        content = Div(
+            H2("Choose Inference Mode"),
+            Ul(
+                Li(A("ControlNet", href=url_for('inference_controlnet'))),
+                Li(A("ControlNet Reduced", href=url_for('inference_controlnet_reduced'))),
+                Li(A("ControlNet HED", href=url_for('inference_controlnet_hed')))
+            )
+        )
+        html_obj = base_layout("Inference Selection", content, navigation=A("Back to Home", href=url_for('index')))
+        return str(html_obj), 200, {'Content-Type': 'text/html'}
 @app.route('/inference/controlnet')
 # ‘/’ URL is bound with hello_world() function.
 def inference_controlnet():
@@ -182,10 +211,53 @@ def inference_controlnet():
 def inference_controlnet_reduced():
     return
 
-@app.route('/inference/controlnetHed')
 # ‘/’ URL is bound with hello_world() function.
+@app.route('/inference/controlnetHed', methods=["GET", "POST"])
 def inference_controlnet_hed():
-    return
+    if request.method == "POST":
+        prompt = request.form['prompt']
+        scale = request.form.get('scale', 0.2)
+        steps = request.form.get('steps', 50)
+        guidance = request.form.get('guidance', 6.0)
+
+        # Call Lambda via SSH
+        command = (
+            f"CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
+            f"HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
+            f"CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
+            f"CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} "
+            f"python3 controlnet_infer_api.py "
+            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance}"
+        )
+        output, errors = run_ssh_command(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH, command)
+
+        result_url = None
+        if output and "https" in output:
+            result_url = output.strip()
+
+        content = Div(
+            H2("Inference Result"),
+            P(f"Prompt: {prompt}"),
+            P(f"Result:"),
+            Img(src=result_url, style="max-width: 500px;") if result_url else P("Error during inference."),
+            P(A("Back to Form", href=url_for('inference_controlnet_hed')))
+        )
+        return str(base_layout("Result", content, navigation=A("Back to Home", href=url_for('index')))), 200
+
+    # GET method: render form
+    form = Form(
+        Label("Prompt:"),
+        Input(type="text", name="prompt", required=True),
+        Label("Conditioning Scale (0.2):"),
+        Input(type="number", name="scale", step="0.1", value="0.2"),
+        Label("Steps (50):"),
+        Input(type="number", name="steps", value="50"),
+        Label("Guidance Scale (6.0):"),
+        Input(type="number", name="guidance", step="0.5", value="6.0"),
+        Button("Submit", type="submit")
+    , method="post")
+
+    return str(base_layout("ControlNet HED Inference", form, navigation=A("Back to Inference Menu", href=url_for('inference')))), 200
 @app.route('/training')
 # ‘/’ URL is bound with hello_world() function.
 def training():
