@@ -11,6 +11,9 @@ from fasthtml.common import *
 from typing import Any
 # Import fast_html components
 import time #for cache busting
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 # Load environment variables from .env file
 load_dotenv()
 import threading
@@ -19,20 +22,22 @@ inference_lock = threading.Lock()
 # Flask constructor takes the name of
 # current module (__name__) as argument.
 app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'a_very_secret_key_for_flash_messages')
+app.secret_key = os.urandom(12)
 # The route() function of the Flask class is a decorator,
 # which tells the application which URL should call
 # --- Configuration for Lambda Cloud ---
+
+LAMBDA_INSTANCE_ID = os.getenv('LAMBDA_INSTANCE_ID')
+LAMBDA_CLOUD_API_BASE = "https://cloud.lambdalabs.com/api/v1/instances"
 LAMBDA_CLOUD_API_KEY = os.getenv('LAMBDA_CLOUD_API_KEY')
-LAMBDA_CLOUD_SSH_KEY_NAME = os.getenv('LAMBDA_CLOUD_SSH_KEY_NAME')
 # Manually get this from your provisioned instance
 LAMBDA_INSTANCE_IP = os.getenv('LAMBDA_INSTANCE_IP', "YOUR_LAMBDA_INSTANCE_PUBLIC_IP")
 LAMBDA_INSTANCE_USER = os.getenv('LAMBDA_INSTANCE_USER', "ubuntu")
 SSH_PRIVATE_KEY_PATH = os.getenv('SSH_PRIVATE_KEY_PATH')
 HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
 DOCKER_IMAGE_NAME = os.getenv('DOCKER_IMAGE_NAME', "your-dockerhub-username/controlnet-generator:latest")
-REGION = "us-west-1"
-
+# for when the docker is ready
+REGION = "us-west-3"
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
 CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY')
 CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
@@ -43,7 +48,35 @@ cloudinary.config(
     api_secret=CLOUDINARY_API_SECRET
 )
 # the associated function.
-# --- SSH Utilities (Same as before) ---
+# SSH Utilities
+def get_lambda_instance_info(instance_id):
+    headers = {
+        "Authorization": f"Bearer {LAMBDA_CLOUD_API_KEY}"
+    }
+    url = f"{LAMBDA_CLOUD_API_BASE}"
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            instances = data.get("data", [])
+            print("DEBUG: Instance list from Lambda API:")
+            print(instances)
+
+            for inst in instances:
+                if inst.get("id") == instance_id:
+                    print("DEBUG: Matched instance:", inst)
+                    return inst
+
+            print("Instance ID not found.")
+            return None
+        except Exception as e:
+            print(f"Failed to parse Lambda instance JSON: {e}")
+            return None
+    else:
+        print(f"Failed to get instance list: {response.status_code} {response.text}")
+        return None
+
 def run_ssh_command(ip, username, private_key_path, command):
     try:
         key = paramiko.RSAKey.from_private_key_file(private_key_path)
@@ -54,8 +87,8 @@ def run_ssh_command(ip, username, private_key_path, command):
 
         print(f"Executing SSH command: {command}")
         stdin, stdout, stderr = client.exec_command(command)
-        output = stdout.read().decode('utf-8').strip()
-        errors = stderr.read().decode('utf-8').strip()
+        output = stdout.read().decode('utf-8', errors='ignore').strip()
+        errors = stderr.read().decode('utf-8', errors='ignore').strip()
 
         if errors:
             print(f"SSH Command Error: {errors}")
@@ -66,20 +99,6 @@ def run_ssh_command(ip, username, private_key_path, command):
     except Exception as e:
         print(f"SSH connection or command execution failed: {e}")
         return None, str(e)
-
-def verify_lambda_connection():
-    """Ping the Lambda instance to verify if it's still connected."""
-    try:
-        command = "echo hello"
-        output, errors = run_ssh_command(
-            LAMBDA_INSTANCE_IP,
-            LAMBDA_INSTANCE_USER,
-            SSH_PRIVATE_KEY_PATH,
-            command
-        )
-        return output.strip() == "hello" and not errors
-    except Exception:
-        return False
 
 # --- Helper function for flashing messages ---
 def get_flashed_html_messages():
@@ -98,7 +117,7 @@ def base_layout(title: str, content: Any, scripts: Any = None, navigation : Any 
     if navigation is None:
         navigation = Nav(
             A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_= "nav-link"),
-            A("Connect to Lambda & Pull Drrrrocker Image", href=url_for('connect_lambda'), class_="nav-link")
+            A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_="nav-link")
         ,class_="main-nav")
     else:
         # If navigation is provided, ensure it's wrapped in a Nav and has the class
@@ -128,7 +147,6 @@ def base_layout(title: str, content: Any, scripts: Any = None, navigation : Any 
     )
 
 @app.route('/')
-# ‘/’ URL is bound with hello_world() function.
 def index():
     is_connected = session.get('lambda_connected', False)
     action_button_section = Div()
@@ -164,57 +182,57 @@ def index():
                     Li("An SSH key pair uploaded to Lambda Cloud and the private key accessible locally."),
                     Li(
                         f"A running Lambda Cloud instance with Docker installed and SSH accessible at {LAMBDA_INSTANCE_IP}."),
-                    Li(f"Your Docker image {DOCKER_IMAGE_NAME} pushed to Docker Hub.")
+                    #Li(f"Your Docker image {DOCKER_IMAGE_NAME} pushed to Docker Hub.")
             ),
             action_button_section,
             get_flashed_html_messages()  # Display messages here too if any
     )
-
-    # In the index() function:
-    # Get the final HTML string from fasthtml
-
-    # Return it as a tuple: (body, status_code, headers)
     html_obj = base_layout("Connect to lambda cloud", content)
     print("DEBUG TYPE OF html_obj:", type(html_obj))
     return str(html_obj), 200, {'Content-Type': 'text/html'}
 
 @app.route('/connect_lambda')
 def connect_lambda():
-    if not LAMBDA_INSTANCE_IP or not SSH_PRIVATE_KEY_PATH:
-        flash('Lambda Instance IP or SSH Private Key Path not configured in .env!', 'error')
+    if not LAMBDA_INSTANCE_ID or not LAMBDA_CLOUD_API_KEY:
+        flash('Lambda instance ID or API key is not configured!', 'error')
         return redirect(url_for('index'))
-    session['lambda_connected'] = False
-    print(f"Attempting to connect to Lambda IP: {LAMBDA_INSTANCE_IP} and pull Docker image.")
-    # Command to pull the Docker image
-    docker_pull_command = f"docker pull {DOCKER_IMAGE_NAME}"
 
-    stdout, stderr = run_ssh_command(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH, docker_pull_command)
+    instance_data = get_lambda_instance_info(LAMBDA_INSTANCE_ID)
+
+    if not instance_data:
+        flash("Lambda instance ID not found or failed to retrieve data.", "error")
+        return redirect(url_for('index'))
+
+    status = instance_data.get("status")
+    public_ip = instance_data.get("ip")
+
+    if status != "active" or not public_ip:
+        flash(f"Lambda instance is not active or missing IP (status: {status})", "error")
+        return redirect(url_for('index'))
+
+    global LAMBDA_INSTANCE_IP
+    LAMBDA_INSTANCE_IP = public_ip
+    command = "source venv_flux/bin/activate && cd tesiControlNetFlux/Src"
+    stdout, stderr = run_ssh_command(public_ip, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH, command)#command for docker
 
     if stderr and "no space left on device" in stderr.lower():
-        flash(f'Error pulling Docker image: No space left on device. Please clean up your Lambda instance. Error: {stderr}', 'error')
+        flash(f'Error during SSH: No space left on device. {stderr}', 'error')
     elif stderr:
-        flash(f'Failed to connect to Lambda or pull Docker image. Check SSH config and Lambda instance. Error: {stderr}', 'error')
+        flash(f'SSH failed: {stderr}', 'error')
     else:
-        flash(f'Successfully connected to Lambda and pulled Docker image: {DOCKER_IMAGE_NAME}', 'success')
+        flash('Successfully verified Lambda instance is up and SSH is working.', 'success')
         session['lambda_connected'] = True
 
-    response = make_response((redirect(url_for('index'))))
-    response.mimetype = 'text/html'
-    response.status_code = 200  # Optional
-    return response
+    return redirect(url_for('index'))
 
 model_map = {
     "hed": "tommycik/controlFluxAlcolHed",
     "reduced": "tommycik/controlFluxAlcolReduced",
     "standard": "tommycik/controlFluxAlcol",
 }
-# ‘/’ URL is bound with hello_world() function.
+
 @app.route('/inference', methods=["GET", "POST"])
 def inference():
-    if not verify_lambda_connection():
-        session['lambda_connected'] = False
-        flash("Lost connection to Lambda Cloud. Please reconnect.", "error")
-        return redirect(url_for('index'))
     if request.method == "POST":
         prompt = request.form['prompt']
         scale = request.form.get('scale', 0.2)
@@ -234,11 +252,11 @@ def inference():
 
             # Call Lambda via SSH
             command = (
-                f"CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
-                f"HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
-                f"CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
-                f"CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} "
-                f"python3 controlnet_infer_api.py "
+                f"export CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} &&"
+                f"export HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} &&"
+                f"export CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} &&"
+                f"export CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} &&"
+                f"source venv_flux/bin/activate && cd tesiControlNetFlux/Src && python3 scripts/controlnet_infer_api.py "
                 f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_map[model]} --N4 {N4} --controlnet_type {model_type}"
             )
             output, errors = run_ssh_command(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH, command)
@@ -252,7 +270,7 @@ def inference():
                 P(f"Prompt: {prompt}"),
                 P(f"Result:"),
                 Img(src=result_url, style="max-width: 500px;") if result_url else P("Error during inference."),
-                P(A("Back to Form", href=url_for('inference_controlnet_hed')))
+                P(A("Back to Form", href=url_for('inference')))
             )
         finally:
             inference_lock.release()
