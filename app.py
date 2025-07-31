@@ -1,43 +1,36 @@
-# Importing flask module in the project is mandatory
-# An object of Flask class is our WSGI application.
 import cloudinary
-from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, make_response, jsonify # ADDED get_flashed_messages
-import os
-import sys
+from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, make_response, jsonify
 import requests
 from dotenv import load_dotenv
-import paramiko # For SSHing into Lambda instance
+import paramiko
 from fasthtml.common import *
 from typing import Any
-# Import fast_html components
 import time #for cache busting
+import threading
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
+
 # Load environment variables from .env file
 load_dotenv()
-import threading
+
 #serializing request to lambda
 inference_lock = threading.Lock()
-# Flask constructor takes the name of
-# current module (__name__) as argument.
+
 app = Flask(__name__)
 app.secret_key = os.urandom(12)
-# The route() function of the Flask class is a decorator,
-# which tells the application which URL should call
-# --- Configuration for Lambda Cloud ---
+
 
 LAMBDA_INSTANCE_ID = os.getenv('LAMBDA_INSTANCE_ID')
 LAMBDA_CLOUD_API_BASE = "https://cloud.lambdalabs.com/api/v1/instances"
 LAMBDA_CLOUD_API_KEY = os.getenv('LAMBDA_CLOUD_API_KEY')
-# Manually get this from your provisioned instance
 LAMBDA_INSTANCE_IP = os.getenv('LAMBDA_INSTANCE_IP', "YOUR_LAMBDA_INSTANCE_PUBLIC_IP")
 LAMBDA_INSTANCE_USER = os.getenv('LAMBDA_INSTANCE_USER', "ubuntu")
 SSH_PRIVATE_KEY_PATH = os.getenv('SSH_PRIVATE_KEY_PATH')
 HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
-DOCKER_IMAGE_NAME = os.getenv('DOCKER_IMAGE_NAME', "your-dockerhub-username/controlnet-generator:latest")
-# for when the docker is ready
+DOCKER_IMAGE_NAME = os.getenv('DOCKER_IMAGE_NAME', "your-dockerhub-username/controlnet-generator:latest")#when docker is ready
 REGION = "us-west-3"
+
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
 CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY')
 CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
@@ -47,7 +40,7 @@ cloudinary.config(
     api_key=CLOUDINARY_API_KEY,
     api_secret=CLOUDINARY_API_SECRET
 )
-# the associated function.
+
 # SSH Utilities
 def get_lambda_instance_info(instance_id):
     headers = {
@@ -63,10 +56,10 @@ def get_lambda_instance_info(instance_id):
             print("DEBUG: Instance list from Lambda API:")
             print(instances)
 
-            for inst in instances:
-                if inst.get("id") == instance_id:
-                    print("DEBUG: Matched instance:", inst)
-                    return inst
+            for instance in instances:
+                if instance.get("id") == instance_id:
+                    print("DEBUG: Matched instance:", instance)
+                    return instance
 
             print("Instance ID not found.")
             return None
@@ -87,8 +80,8 @@ def run_ssh_command(ip, username, private_key_path, command):
 
         print(f"Executing SSH command: {command}")
         stdin, stdout, stderr = client.exec_command(command)
-        output = stdout.read().decode('utf-8', errors='ignore').strip()
-        errors = stderr.read().decode('utf-8', errors='ignore').strip()
+        output = stdout.read().decode('utf-8', errors='replace').strip()
+        errors = stderr.read().decode('utf-8', errors='replace').strip()
 
         if errors:
             print(f"SSH Command Error: {errors}")
@@ -100,7 +93,7 @@ def run_ssh_command(ip, username, private_key_path, command):
         print(f"SSH connection or command execution failed: {e}")
         return None, str(e)
 
-# --- Helper function for flashing messages ---
+# Helper function for messages
 def get_flashed_html_messages():
     messages_html = []
     for category, message in get_flashed_messages(with_categories=True):
@@ -297,56 +290,37 @@ def inference():
 
     return str(base_layout("ControlNet HED Inference", form, navigation=A("Back to Inference Menu", href=url_for('inference')))), 200
 @app.route('/training')
-# ‘/’ URL is bound with hello_world() function.
 def training():
     return
 
 @app.route('/training/controlnet')
-# ‘/’ URL is bound with hello_world() function.
 def training_controlnet():
     return
 @app.route('/training/controlnetReduced')
-# ‘/’ URL is bound with hello_world() function.
 def training_controlnet_reduced():
     return
 
 @app.route('/training/controlnetHed')
-# ‘/’ URL is bound with hello_world() function.
 def training_controlnet_hed():
     return
 @app.route('/results')
-# ‘/’ URL is bound with hello_world() function.
 def results():
     return
 
 @app.route('/results/controlnet')
-# ‘/’ URL is bound with hello_world() function.
 def results_controlnet():
     return
 @app.route('/results/controlnetReduced')
-# ‘/’ URL is bound with hello_world() function.
 def results_controlnet_reduced():
     return
 
 @app.route('/results/controlnetHed')
-# ‘/’ URL is bound with hello_world() function.
 def results_controlnet_hed():
-    return
-
-# A simple API endpoint for JavaScript to interact with
-@app.route('/api/greet', methods=['POST'])
-def greet_api():
-    data = request.json
-    name = data.get('name', 'Guest')
-    message = f"Hello, {name}! This message came from Flask via JavaScript."
     return
 
 # main driver function
 if __name__ == '__main__':
 
-    # run() method of Flask class runs the application
-    # on the local development server.
-    # It's good practice to set a FLASK_SECRET_KEY in your .env
     if not app.secret_key:
         print("WARNING: FLASK_SECRET_KEY is not set in .env. Using a default for development.")
         print("Set FLASK_SECRET_KEY=your_random_string_here for production.")
