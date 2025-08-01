@@ -319,15 +319,21 @@ def inference():
         elif model == "reduced":
             n4 = True
         control_image_path = None
-        if 'control_image' in request.files:
-            data_url = request.form['control_image_data']
+        remote_control_path = None
+
+        data_url = request.form.get('control_image_data')
+        if data_url and "," in data_url:
             header, encoded = data_url.split(",", 1)
             binary_data = base64.b64decode(encoded)
             image = Image.open(BytesIO(binary_data)).convert("RGB")
-            control_image_path = f"/tmp/{uuid.uuid4()}.png"
-            image.save(control_image_path)
-        remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.png"
-        scp_to_lambda(control_image_path, remote_control_path)
+
+            # Check if image is completely white (or blank)
+            np_image = np.array(image)
+            if np_image.max() != 255 or np_image.min() != 255:
+                control_image_path = f"/tmp/{uuid.uuid4()}.png"
+                image.save(control_image_path)
+                remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.png"
+                scp_to_lambda(control_image_path, remote_control_path)
         # Call Lambda via SSH
         command = (
             f"export CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} &&"
@@ -335,8 +341,10 @@ def inference():
             f"export CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} &&"
             f"export CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} &&"
             f"source venv_flux/bin/activate && cd tesiControlNetFlux/Src && python3 scripts/controlnet_infer_api.py "
-            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_map[model]} --N4 {n4} --controlnet_type {model_type} --control_image {remote_control_path}"
+            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_map[model]} --N4 {n4} --controlnet_type {model_type}"
         )
+        if remote_control_path:
+            command += f"--control_image {remote_control_path} "
         job_id = str(uuid.uuid4())
         inference_queue.put({"job_id": job_id, "command": command})
 
