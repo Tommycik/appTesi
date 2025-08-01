@@ -1,3 +1,6 @@
+import uuid
+from io import BytesIO
+
 import cloudinary
 from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, make_response, jsonify
 import requests
@@ -8,6 +11,23 @@ from typing import Any
 import time  #for cache busting
 import threading
 import queue
+from PIL import Image
+import cv2
+import numpy as np
+from werkzeug.utils import secure_filename
+
+
+def scp_to_lambda(local_path, remote_path):
+    import paramiko
+    from scp import SCPClient
+
+    key = paramiko.RSAKey.from_private_key_file(SSH_PRIVATE_KEY_PATH)
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(LAMBDA_INSTANCE_IP, username=LAMBDA_INSTANCE_USER, pkey=key)
+
+    with SCPClient(ssh.get_transport()) as scp:
+        scp.put(local_path, remote_path)
 
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 sys.stdout.reconfigure(encoding='utf-8')
@@ -22,6 +42,21 @@ inference_queue = queue.Queue()
 results_db = {}
 # A lock to serialize the SSH command
 worker_lock = threading.Lock()
+
+def worker():
+    while True:
+        job = inference_queue.get()
+        if job is None:
+            break
+        try:
+            output, errors = ssh_manager.run_command(job["command"])
+            result_url = None
+            if output and "https" in output:
+                result_url = output.strip()
+            results_db[job["job_id"]] = result_url or errors or "Unknown error"
+        except Exception as e:
+            results_db[job["job_id"]] = f"Exception during inference: {e}"
+        inference_queue.task_done()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(12)
@@ -46,7 +81,49 @@ cloudinary.config(
     api_key=CLOUDINARY_API_KEY,
     api_secret=CLOUDINARY_API_SECRET
 )
+class SSHManager:
+    def __init__(self, ip, username, key_path):
+        self.ip = ip
+        self.username = username
+        self.key_path = key_path
+        self.client = None
+        self.lock = threading.Lock()
+        self.connect()
 
+    def connect(self):
+        try:
+            key = paramiko.RSAKey.from_private_key_file(self.key_path)
+            self.client = paramiko.SSHClient()
+            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.client.connect(hostname=self.ip, username=self.username, pkey=key)
+            print("SSH connected.")
+        except Exception as e:
+            print(f"SSH connection failed: {e}")
+            self.client = None
+
+    def is_connected(self):
+        if not self.client:
+            return False
+        try:
+            transport = self.client.get_transport()
+            return transport and transport.is_active()
+        except:
+            return False
+
+    def reconnect_if_needed(self):
+        if not self.is_connected():
+            print("SSH not connected, reconnecting...")
+            self.connect()
+
+    def run_command(self, command):
+        with self.lock:
+            self.reconnect_if_needed()
+            if not self.client:
+                return None, "SSH client not connected"
+            stdin, stdout, stderr = self.client.exec_command(command)
+            output = stdout.read().decode('utf-8', errors='replace').strip()
+            errors = stderr.read().decode('utf-8', errors='replace').strip()
+            return output, errors
 
 # SSH Utilities
 def get_lambda_instance_info(instance_id):
@@ -78,30 +155,7 @@ def get_lambda_instance_info(instance_id):
         return None
 
 
-def run_ssh_command(ip, username, private_key_path, command):
-    try:
-        key = paramiko.RSAKey.from_private_key_file(private_key_path)
-        client = paramiko.SSHClient()
-        client.load_system_host_keys()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(hostname=ip, username=username, pkey=key)
-
-        print(f"Executing SSH command: {command}")
-        stdin, stdout, stderr = client.exec_command(command)
-        output = stdout.read().decode('utf-8', errors='replace').strip()
-        errors = stderr.read().decode('utf-8', errors='replace').strip()
-
-        if errors:
-            print(f"SSH Command Error: {errors}")
-        print(f"SSH Command Output: {output}")
-
-        client.close()
-        return output, errors
-    except Exception as e:
-        print(f"SSH connection or command execution failed: {e}")
-        return None, str(e)
-
-
+ssh_manager = SSHManager(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH)
 # Helper function for messages
 def get_flashed_html_messages():
     messages_html = []
@@ -146,6 +200,17 @@ def base_layout(title: str, content: Any, scripts: Any = None, navigation: Any =
         )
     )
 
+def convert_to_canny(input_path):
+    img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
+    edges = cv2.Canny(img, 100, 200)
+    out_path = input_path.replace(".png", "_canny.png")
+    cv2.imwrite(out_path, edges)
+    return out_path
+
+def convert_to_hed(input_path):
+    # Placeholder: use OpenCV's structured forest edge detection or deep HED model if available
+    # For now just use canny as placeholder
+    return convert_to_canny(input_path)
 
 @app.route('/')
 def index():
@@ -211,8 +276,7 @@ def connect_lambda():
     global LAMBDA_INSTANCE_IP
     LAMBDA_INSTANCE_IP = public_ip
     command = "source venv_flux/bin/activate && cd tesiControlNetFlux/Src"
-    stdout, stderr = run_ssh_command(public_ip, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH,
-                                     command)  #command for docker
+    stdout, stderr = ssh_manager.run_command(command)  #command for docker
 
     if stderr and "no space left on device" in stderr.lower():
         flash(f'Error during SSH: No space left on device. {stderr}', 'error')
@@ -231,6 +295,12 @@ model_map = {
     "standard": "tommycik/controlFluxAlcol",
 }
 
+@app.route('/inference_result/<job_id>', methods=["GET"])
+def get_inference_result(job_id):
+    result = results_db.get(job_id)
+    if result is None:
+        return jsonify({"status": "pending"})
+    return jsonify({"status": "done", "output": result})
 
 @app.route('/inference', methods=["GET", "POST"])
 def inference():
@@ -240,42 +310,62 @@ def inference():
         steps = request.form.get('steps', 50)
         guidance = request.form.get('guidance', 6.0)
         model = request.form.get('model', 'standard')
-        if not worker_lock.acquire(blocking=False):
-            return jsonify({"error": "Inference is already running. Please wait."}), 429
 
-        try:
-            model_type = "canny"
-            n4 = False
-            if model == "hed":
-                model_type = "hed"
-            elif model == "reduced":
-                n4 = True
 
-            # Call Lambda via SSH
-            command = (
-                f"export CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} &&"
-                f"export HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} &&"
-                f"export CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} &&"
-                f"export CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} &&"
-                f"source venv_flux/bin/activate && cd tesiControlNetFlux/Src && python3 scripts/controlnet_infer_api.py "
-                f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_map[model]} --N4 {n4} --controlnet_type {model_type}"
-            )
-            output, errors = run_ssh_command(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH, command)
+        model_type = "canny"
+        n4 = False
+        if model == "hed":
+            model_type = "hed"
+        elif model == "reduced":
+            n4 = True
+        control_image_path = None
+        if 'control_image' in request.files:
+            data_url = request.form['control_image_data']
+            header, encoded = data_url.split(",", 1)
+            binary_data = base64.b64decode(encoded)
+            image = Image.open(BytesIO(binary_data)).convert("RGB")
+            control_image_path = f"/tmp/{uuid.uuid4()}.png"
+            image.save(control_image_path)
+        remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.png"
+        scp_to_lambda(control_image_path, remote_control_path)
+        # Call Lambda via SSH
+        command = (
+            f"export CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} &&"
+            f"export HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} &&"
+            f"export CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} &&"
+            f"export CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} &&"
+            f"source venv_flux/bin/activate && cd tesiControlNetFlux/Src && python3 scripts/controlnet_infer_api.py "
+            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_map[model]} --N4 {n4} --controlnet_type {model_type} --control_image {remote_control_path}"
+        )
+        job_id = str(uuid.uuid4())
+        inference_queue.put({"job_id": job_id, "command": command})
 
-            result_url = None
-            if output and "https" in output:
-                result_url = output.strip()
+        content = Div(
+            H2("Inference Job Submitted"),
+            P(f"Prompt: {prompt}"),
+            P(f"Job ID: {job_id}"),
+            Div("Waiting for result...", id="result-section"),
+            Script(f"""
+            async function pollResult() {{
+                const res = await fetch("{url_for('get_inference_result', job_id=job_id)}");
+                const data = await res.json();
+                if (data.status === "done") {{
+                    let resultDiv = document.getElementById("result-section");
+                    if (data.output.startsWith("http")) {{
+                        resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
+                    }} else {{
+                        resultDiv.innerHTML = "<p>" + data.output + "</p>";
+                    }}
+                }} else {{
+                    setTimeout(pollResult, 2000);
+                }}
+            }}
+            pollResult();
+            """)
+        )
 
-            content = Div(
-                H2("Inference Result"),
-                P(f"Prompt: {prompt}"),
-                P(f"Result:"),
-                Img(src=result_url, style="max-width: 500px;") if result_url else P("Error during inference."),
-                P(A("Back to Form", href=url_for('inference')))
-            )
-        finally:
-            worker_lock.release()
-        return str(base_layout("Result", content, navigation=A("Back to Home", href=url_for('index')))), 200
+        return str(
+            base_layout("Waiting for Inference", content, navigation=A("Back to Home", href=url_for('index')))), 200
 
     # GET method: render form
     form = Form(
@@ -287,6 +377,85 @@ def inference():
         ),
         Label("Prompt:"),
         Input(type="text", name="prompt", required=True),
+        Div(
+            Label("Upload Image:"),
+            Input(type="file", id="uploadInput", accept="image/*"),
+
+            Br(), Br(),
+
+            Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid black;"),
+
+            Br(),
+
+            Button("Clear Canvas", type="button", onclick="clearCanvas()"),
+
+            Br(), Br(),
+
+            Input(type="hidden", name="control_image_data", id="controlImageData"),
+
+            Script("""
+                const canvas = document.getElementById("drawCanvas");
+                const ctx = canvas.getContext("2d");
+                let drawing = false;
+            
+                canvas.addEventListener("mousedown", () => drawing = true);
+                canvas.addEventListener("mouseup", () => {
+                    drawing = false;
+                    ctx.beginPath();
+                });
+                canvas.addEventListener("mousemove", draw);
+            
+                function draw(e) {
+                    if (!drawing) return;
+                    ctx.lineWidth = 3;
+                    ctx.lineCap = "round";
+                    ctx.strokeStyle = "black";
+                    ctx.lineTo(e.offsetX, e.offsetY);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(e.offsetX, e.offsetY);
+                }
+            
+                function clearCanvas() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    if (window.convertedImage) {
+                        ctx.drawImage(window.convertedImage, 0, 0, canvas.width, canvas.height);
+                    }
+                }
+            
+                document.getElementById("uploadInput").addEventListener("change", async function (e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+            
+                    const modelType = document.getElementById("model").value; // hed or canny
+                    const formData = new FormData();
+                    formData.append("image", file);
+                    formData.append("model_type", modelType);
+            
+                    const response = await fetch("/preprocess_image", { method: "POST", body: formData });
+                    const data = await response.json();
+            
+                    if (data.status === "ok") {
+                        const img = new Image();
+                        img.onload = function () {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            window.convertedImage = img;
+                        };
+                        img.src = data.converted_data_url;
+                    } else {
+                        alert("Error: " + data.error);
+                    }
+                });
+            
+                document.querySelector("form").addEventListener("submit", function (e) {
+                    const dataURL = canvas.toDataURL("image/png");
+                    document.getElementById("controlImageData").value = dataURL;
+                });
+                """
+            )
+        ),
+
         Label("Conditioning Scale (0.2):"),
         Input(type="number", name="scale", step="0.1", value="0.2"),
         Label("Steps (50):"),
@@ -294,12 +463,34 @@ def inference():
         Label("Guidance Scale (6.0):"),
         Input(type="number", name="guidance", step="0.5", value="6.0"),
         Button("Submit", type="submit")
-        , method="post")
+        , method="post", enctype="multipart/form-data")
 
-    return str(base_layout("ControlNet HED Inference", form,
+    return str(base_layout("ControlNet Inference", form,
                            navigation=A("Back to Inference Menu", href=url_for('inference')))), 200
 
+@app.route("/preprocess_image", methods=["POST"])
+def preprocess_image():
+    try:
+        file = request.files["image"]
+        model_type = request.form["model_type"]
+        image = Image.open(file.stream).convert("RGB")
 
+        temp_path = f"/tmp/{uuid.uuid4()}.png"
+        image.save(temp_path)
+
+        if model_type == "canny":
+            result_path = convert_to_canny(temp_path)
+        elif model_type == "hed":
+            result_path = convert_to_hed(temp_path)
+        else:
+            return jsonify({"status": "error", "error": "Invalid model_type"})
+
+        with open(result_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode("utf-8")
+            data_url = f"data:image/png;base64,{encoded}"
+            return jsonify({"status": "ok", "converted_data_url": data_url})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)})
 @app.route('/training')
 def training():
     return
@@ -342,7 +533,7 @@ def results_controlnet_hed():
 
 # main driver function
 if __name__ == '__main__':
-
+    threading.Thread(target=worker, daemon=True).start()
     if not app.secret_key:
         print("WARNING: FLASK_SECRET_KEY is not set in .env. Using a default for development.")
         print("Set FLASK_SECRET_KEY=your_random_string_here for production.")
