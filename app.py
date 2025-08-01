@@ -7,6 +7,7 @@ from fasthtml.common import *
 from typing import Any
 import time  #for cache busting
 import threading
+import queue
 
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 sys.stdout.reconfigure(encoding='utf-8')
@@ -16,7 +17,11 @@ sys.stderr.reconfigure(encoding='utf-8')
 load_dotenv()
 
 #serializing request to lambda
-inference_lock = threading.Lock()
+inference_queue = queue.Queue()
+# Dictionary to store results, keyed by a unique job ID
+results_db = {}
+# A lock to serialize the SSH command
+worker_lock = threading.Lock()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(12)
@@ -235,7 +240,7 @@ def inference():
         steps = request.form.get('steps', 50)
         guidance = request.form.get('guidance', 6.0)
         model = request.form.get('model', 'standard')
-        if not inference_lock.acquire(blocking=False):
+        if not worker_lock.acquire(blocking=False):
             return jsonify({"error": "Inference is already running. Please wait."}), 429
 
         try:
@@ -269,7 +274,7 @@ def inference():
                 P(A("Back to Form", href=url_for('inference')))
             )
         finally:
-            inference_lock.release()
+            worker_lock.release()
         return str(base_layout("Result", content, navigation=A("Back to Home", href=url_for('index')))), 200
 
     # GET method: render form
