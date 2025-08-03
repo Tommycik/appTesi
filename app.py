@@ -15,7 +15,7 @@ from PIL import Image
 import cv2
 import numpy as np
 from werkzeug.utils import secure_filename
-
+import re
 
 def scp_to_lambda(local_path, remote_path):
     import paramiko
@@ -25,6 +25,7 @@ def scp_to_lambda(local_path, remote_path):
     key = paramiko.RSAKey.from_private_key_file(SSH_PRIVATE_KEY_PATH)
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    print(f"Attempting to SCP from {local_path} to {remote_path}")
     ssh.connect(LAMBDA_INSTANCE_IP, username=LAMBDA_INSTANCE_USER, pkey=key)
 
     # Ensure the remote directory exists
@@ -124,27 +125,53 @@ class SSHManager:
             errors = stderr.read().decode('utf-8', errors='replace').strip()
             return output, errors
 
+
 def worker():
+    print("Worker thread has started and is ready to process jobs.")
     while True:
         job = inference_queue.get()
         if job is None:
             break
+
+        job_id = job['job_id']
+        command = job['command']
+
         try:
-            print(f"Running job: {job['job_id']}")
-            output, errors = ssh_manager.run_command(job["command"])
-            print("OUTPUT:", output)
-            print("ERRORS:", errors)
+            print(f"[{time.ctime()}] Worker: Starting job {job_id}")
+
+            # Added the timeout parameter for robust execution
+            output, errors = ssh_manager.run_command(command)
+
+            print(f"[{time.ctime()}] Worker: Job {job_id} completed.")
+            print("SSH OUTPUT:", output)
+            print("SSH ERRORS:", errors)
 
             result_url = None
-            if output and "https" in output:
-                result_url = output.strip()
+            # Use a more robust check for a URL
+            url_match = re.search(r'(https?://\S+)', output)
+            if url_match:
+                result_url = url_match.group(0)
 
-            results_db[job["job_id"]] = result_url or errors or "Unknown error"
+            # --- Corrected logic starts here ---
+            # 1. First, check for a successful result URL
+            if result_url:
+                results_db[job_id] = result_url
+            # 2. If no URL is found, then check for actual errors
+            elif errors:
+                results_db[job_id] = f"SSH Command Failed: {errors}"
+            # 3. Handle the case where there's no URL and no error (unexpected)
+            else:
+                results_db[job_id] = f"Inference completed, but no valid URL was returned. Output: {output}"
+            # --- Corrected logic ends here ---
+
         except Exception as e:
-            print("Exception:", e)
-            results_db[job["job_id"]] = f"Exception during inference: {e}"
-        inference_queue.task_done()
+            print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
+            results_db[job_id] = f"Internal server error: {e}"
+        finally:
+            inference_queue.task_done()
 
+worker_thread = threading.Thread(target=worker, daemon=True)
+worker_thread.start()
 # SSH Utilities
 def get_lambda_instance_info(instance_id):
     headers = {
@@ -359,7 +386,7 @@ def inference():
             f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_map[model]} --N4 {n4} --controlnet_type {model_type}"
         )
         if remote_control_path:
-            command += f"--control_image {remote_control_path} "
+            command += f" --control_image {remote_control_path} "
         job_id = str(uuid.uuid4())
         inference_queue.put({"job_id": job_id, "command": command})
 
@@ -568,6 +595,5 @@ if __name__ == '__main__':
         print("WARNING: LAMBDA_CLOUD_API_KEY is not set in .env.")
     if not SSH_PRIVATE_KEY_PATH:
         print("WARNING: SSH_PRIVATE_KEY_PATH is not set in .env.")
-    threading.Thread(target=worker, daemon=True).start()
-    app.run(threaded=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)
 
