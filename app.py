@@ -20,11 +20,19 @@ from werkzeug.utils import secure_filename
 def scp_to_lambda(local_path, remote_path):
     import paramiko
     from scp import SCPClient
+    import os
 
     key = paramiko.RSAKey.from_private_key_file(SSH_PRIVATE_KEY_PATH)
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(LAMBDA_INSTANCE_IP, username=LAMBDA_INSTANCE_USER, pkey=key)
+
+    # Ensure the remote directory exists
+    remote_dir = os.path.dirname(remote_path)
+    stdin, stdout, stderr = ssh.exec_command(f'mkdir -p {remote_dir}')
+    exit_status = stdout.channel.recv_exit_status()
+    if exit_status != 0:
+        raise RuntimeError(f"Failed to create remote directory {remote_dir}: {stderr.read().decode()}")
 
     with SCPClient(ssh.get_transport()) as scp:
         scp.put(local_path, remote_path)
@@ -42,21 +50,6 @@ inference_queue = queue.Queue()
 results_db = {}
 # A lock to serialize the SSH command
 worker_lock = threading.Lock()
-
-def worker():
-    while True:
-        job = inference_queue.get()
-        if job is None:
-            break
-        try:
-            output, errors = ssh_manager.run_command(job["command"])
-            result_url = None
-            if output and "https" in output:
-                result_url = output.strip()
-            results_db[job["job_id"]] = result_url or errors or "Unknown error"
-        except Exception as e:
-            results_db[job["job_id"]] = f"Exception during inference: {e}"
-        inference_queue.task_done()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(12)
@@ -130,6 +123,27 @@ class SSHManager:
             output = stdout.read().decode('utf-8', errors='replace').strip()
             errors = stderr.read().decode('utf-8', errors='replace').strip()
             return output, errors
+
+def worker():
+    while True:
+        job = inference_queue.get()
+        if job is None:
+            break
+        try:
+            print(f"Running job: {job['job_id']}")
+            output, errors = ssh_manager.run_command(job["command"])
+            print("OUTPUT:", output)
+            print("ERRORS:", errors)
+
+            result_url = None
+            if output and "https" in output:
+                result_url = output.strip()
+
+            results_db[job["job_id"]] = result_url or errors or "Unknown error"
+        except Exception as e:
+            print("Exception:", e)
+            results_db[job["job_id"]] = f"Exception during inference: {e}"
+        inference_queue.task_done()
 
 # SSH Utilities
 def get_lambda_instance_info(instance_id):
@@ -214,9 +228,8 @@ def convert_to_canny(input_path):
     return out_path
 
 def convert_to_hed(input_path):
-    # Placeholder: use OpenCV's structured forest edge detection or deep HED model if available
-    # For now just use canny as placeholder
-    return convert_to_canny(input_path)
+    from hed_infer import hed_from_path
+    return hed_from_path(input_path)
 
 @app.route('/')
 def index():
@@ -328,9 +341,12 @@ def inference():
 
             # Check if image is completely white (or blank)
             np_image = np.array(image)
-            if np_image.max() != 255 or np_image.min() != 255:
-                control_image_path = f"/tmp/{uuid.uuid4()}.png"
+            if not np.all(np_image == [0, 0, 0]):
+                import tempfile
+                control_image_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.png")
                 image.save(control_image_path)
+                if not os.path.exists(control_image_path):
+                    raise RuntimeError(f"Image save failed. Path not found: {control_image_path}")
                 remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.png"
                 scp_to_lambda(control_image_path, remote_control_path)
         # Call Lambda via SSH
@@ -403,6 +419,10 @@ def inference():
             Script("""
                 const canvas = document.getElementById("drawCanvas");
                 const ctx = canvas.getContext("2d");
+                
+                ctx.fillStyle = "black";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
                 let drawing = false;
             
                 canvas.addEventListener("mousedown", () => drawing = true);
@@ -416,7 +436,7 @@ def inference():
                     if (!drawing) return;
                     ctx.lineWidth = 3;
                     ctx.lineCap = "round";
-                    ctx.strokeStyle = "black";
+                    ctx.strokeStyle = "white";
                     ctx.lineTo(e.offsetX, e.offsetY);
                     ctx.stroke();
                     ctx.beginPath();
@@ -425,9 +445,9 @@ def inference():
             
                 function clearCanvas() {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    if (window.convertedImage) {
-                        ctx.drawImage(window.convertedImage, 0, 0, canvas.width, canvas.height);
-                    }
+                    ctx.fillStyle = "black";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    window.convertedImage = null; // Clear the converted image reference
                 }
             
                 document.getElementById("uploadInput").addEventListener("change", async function (e) {
@@ -540,7 +560,7 @@ def results_controlnet_hed():
 
 # main driver function
 if __name__ == '__main__':
-    threading.Thread(target=worker, daemon=True).start()
+
     if not app.secret_key:
         print("WARNING: FLASK_SECRET_KEY is not set in .env. Using a default for development.")
         print("Set FLASK_SECRET_KEY=your_random_string_here for production.")
@@ -548,5 +568,6 @@ if __name__ == '__main__':
         print("WARNING: LAMBDA_CLOUD_API_KEY is not set in .env.")
     if not SSH_PRIVATE_KEY_PATH:
         print("WARNING: SSH_PRIVATE_KEY_PATH is not set in .env.")
+    threading.Thread(target=worker, daemon=True).start()
+    app.run(threaded=True, host='0.0.0.0', port=5000)
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
