@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="serializing and image upload">
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="inference and serializing">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -89,8 +88,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-1d06a55b98c1-0b3e54e931b4-JavaScript-PY-241.17890.14" />
-        <option value="bundled-python-sdk-5b207ade9991-7e9c3bbb6e34-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.17890.14" />
+        <option value="bundled-js-predefined-1d06a55b98c1-74d2a5396914-JavaScript-PY-241.14494.241" />
+        <option value="bundled-python-sdk-0509580d9d50-28c9f5db9ffe-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.14494.241" />
       </set>
     </attachedChunks>
   </component>
@@ -105,8 +104,7 @@
       <workItem from="1753796593041" duration="11537000" />
       <workItem from="1753830474828" duration="7284000" />
       <workItem from="1753888217141" duration="13925000" />
-      <workItem from="1754047730032" duration="5352000" />
-      <workItem from="1754055428556" duration="242000" />
+      <workItem from="1754065460402" duration="402000" />
     </task>
     <task id="LOCAL-00001" summary="flask app">
       <option name="closed" value="true" />
@@ -164,15 +162,7 @@
       <option name="project" value="LOCAL" />
       <updated>1753987339470</updated>
     </task>
-    <task id="LOCAL-00008" summary="serializing and image upload">
-      <option name="closed" value="true" />
-      <created>1754054371119</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
-      <option name="project" value="LOCAL" />
-      <updated>1754054371119</updated>
-    </task>
-    <option name="localTasksCounter" value="9" />
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -204,8 +194,7 @@
     <MESSAGE value="flask app" />
     <MESSAGE value="inference" />
     <MESSAGE value="inference and serializing" />
-    <MESSAGE value="serializing and image upload" />
-    <option name="LAST_COMMIT_MESSAGE" value="serializing and image upload" />
+    <option name="LAST_COMMIT_MESSAGE" value="inference and serializing" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
