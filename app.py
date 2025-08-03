@@ -81,6 +81,12 @@ cloudinary.config(
     api_key=CLOUDINARY_API_KEY,
     api_secret=CLOUDINARY_API_SECRET
 )
+
+model_map = {
+    "hed": "tommycik/controlFluxAlcolHed",
+    "reduced": "tommycik/controlFluxAlcolReduced",
+    "standard": "tommycik/controlFluxAlcol",
+}
 class SSHManager:
     def __init__(self, ip, username, key_path):
         self.ip = ip
@@ -287,13 +293,6 @@ def connect_lambda():
         session['lambda_connected'] = True
 
     return redirect(url_for('index'))
-
-
-model_map = {
-    "hed": "tommycik/controlFluxAlcolHed",
-    "reduced": "tommycik/controlFluxAlcolReduced",
-    "standard": "tommycik/controlFluxAlcol",
-}
 
 @app.route('/inference_result/<job_id>', methods=["GET"])
 def get_inference_result(job_id):
