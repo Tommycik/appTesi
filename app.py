@@ -250,7 +250,7 @@ def base_layout(title: str, content: Any, scripts: Any = None, navigation: Any =
 def convert_to_canny(input_path):
     img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
     edges = cv2.Canny(img, 100, 200)
-    out_path = input_path.replace(".png", "_canny.png")
+    out_path = input_path.replace(".jpg", "_canny.jpg")
     cv2.imwrite(out_path, edges)
     return out_path
 
@@ -370,11 +370,9 @@ def inference():
             np_image = np.array(image)
             if not np.all(np_image == [0, 0, 0]):
                 import tempfile
-                control_image_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.png")
+                control_image_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.jpg")
                 image.save(control_image_path)
-                if not os.path.exists(control_image_path):
-                    raise RuntimeError(f"Image save failed. Path not found: {control_image_path}")
-                remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.png"
+                remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.jpg"
                 scp_to_lambda(control_image_path, remote_control_path)
         # Call Lambda via SSH
         command = (
@@ -428,8 +426,8 @@ def inference():
         Label("Prompt:"),
         Input(type="text", name="prompt", required=True),
         Div(
-            Label("Upload Image:"),
-            Input(type="file", id="uploadInput", accept="image/*"),
+            Label("Upload Images:"),
+            Input(type="file", id="uploadInput", accept="image/*", multiple=True),
 
             Br(), Br(),
 
@@ -478,17 +476,19 @@ def inference():
                 }
             
                 document.getElementById("uploadInput").addEventListener("change", async function (e) {
-                    const file = e.target.files[0];
-                    if (!file) return;
-            
-                    const modelType = document.getElementById("model").value; // hed or canny
+                    const files = e.target.files;
+                    if (!files.length) return;
+                
+                    const modelType = document.getElementById("model").value;
                     const formData = new FormData();
-                    formData.append("image", file);
+                    for (let file of files) {
+                        formData.append("images", file);
+                    }
                     formData.append("model_type", modelType);
-            
+                
                     const response = await fetch("/preprocess_image", { method: "POST", body: formData });
                     const data = await response.json();
-            
+                
                     if (data.status === "ok") {
                         const img = new Image();
                         img.onload = function () {
@@ -525,30 +525,185 @@ def inference():
 @app.route("/preprocess_image", methods=["POST"])
 def preprocess_image():
     try:
-        file = request.files["image"]
+        files = request.files.getlist("images")
         model_type = request.form["model_type"]
-        image = Image.open(file.stream).convert("RGB")
+        merged_image = None
 
-        temp_path = f"/tmp/{uuid.uuid4()}.png"
-        image.save(temp_path)
+        for file in files:
+            image = Image.open(file.stream).convert("RGB")
+            temp_path = f"/tmp/{uuid.uuid4()}.jpg"
+            image.save(temp_path)
 
-        if model_type == "canny":
-            result_path = convert_to_canny(temp_path)
-        elif model_type == "hed":
-            result_path = convert_to_hed(temp_path)
-        else:
-            return jsonify({"status": "error", "error": "Invalid model_type"})
+            if model_type == "canny":
+                result_path = convert_to_canny(temp_path)
+            elif model_type == "hed":
+                result_path = convert_to_hed(temp_path)
+            else:
+                return jsonify({"status": "error", "error": "Invalid model_type"})
 
-        with open(result_path, "rb") as f:
+            img_arr = cv2.imread(result_path, cv2.IMREAD_GRAYSCALE)
+            if merged_image is None:
+                merged_image = img_arr
+            else:
+                merged_image = cv2.add(merged_image, img_arr)
+
+        # Convert merged_image back to RGB for canvas
+        merged_rgb = cv2.cvtColor(merged_image, cv2.COLOR_GRAY2RGB)
+        merged_path = f"/tmp/{uuid.uuid4()}_merged.jpg"
+        cv2.imwrite(merged_path, merged_rgb)
+
+        with open(merged_path, "rb") as f:
             encoded = base64.b64encode(f.read()).decode("utf-8")
             data_url = f"data:image/png;base64,{encoded}"
             return jsonify({"status": "ok", "converted_data_url": data_url})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)})
-@app.route('/training')
-def training():
-    return
 
+training_status = {
+    "running": False,
+    "progress": 0,
+    "message": "",
+    "done": False
+}
+def run_training(args):
+    training_status["running"] = True
+    training_status["progress"] = 0
+    training_status["message"] = "Starting training..."
+    training_status["done"] = False
+
+    # Simulate progress tracking (replace with real parsing of training logs)
+    for i in range(1, 101):
+        training_status["progress"] = i
+        training_status["message"] = f"Training... {i}%"
+        time.sleep(0.5)  # simulate time per step
+
+    training_status["running"] = False
+    training_status["done"] = True
+    training_status["message"] = "Training complete"
+
+@app.route('/training', methods=["GET", "POST"])
+def training():
+    if request.method == "POST":
+        try:
+            controlnet_model = request.form["controlnet_model"]
+            controlnet_type = request.form["controlnet_type"]
+            prompt = request.form["prompt"]
+            learning_rate = request.form.get("learning_rate", "2e-6")
+            steps = request.form["steps"]
+            train_batch_size = request.form["train_batch_size"]
+            hub_model_id = request.form["hub_model_id"]
+            training_script = request.form["training_script"]
+
+            control_img_path = None
+            if "control_image" in request.files:
+                img_file = request.files["control_image"]
+                if img_file and img_file.filename.lower().endswith((".jpg", ".jpeg")):
+                    tmp_dir = tempfile.mkdtemp()
+                    control_img_path = os.path.join(tmp_dir, img_file.filename)
+                    img_file.save(control_img_path)
+                else:
+                    return jsonify({"status": "error", "error": "Only JPG allowed"})
+
+            # Normally you'd call subprocess.Popen here, but we'll simulate
+            thread = threading.Thread(target=run_training, args=([training_script]))
+            thread.start()
+
+            return jsonify({"status": "ok", "message": "Training started"})
+        except Exception as e:
+            return jsonify({"status": "error", "error": str(e)})
+
+    content = Div(
+        Div("ControlNet Training", cls="title"),
+        Form(
+            Label("ControlNet Model:", for_="controlnetModel"),
+            Select(
+                Option("Flux ControlNet HED",
+                       value="Xlabs-AI/flux-controlnet-hed-diffusers",
+                       data_type="hed",
+                       data_prompt="photo of a city skyline",
+                       data_steps="1000",
+                       data_batch="2"),
+                Option("Flux ControlNet Canny",
+                       value="Xlabs-AI/flux-controlnet-canny-diffusers",
+                       data_type="canny",
+                       data_prompt="a sports car on a mountain road",
+                       data_steps="1500",
+                       data_batch="4"),
+                id="controlnetModel",
+                name="controlnet_model",
+                cls="input"
+            ),
+
+            Label("ControlNet Type:", for_="controlnetType"),
+            Input(id="controlnetType", name="controlnet_type", required=True, cls="input"),
+
+            Label("Prompt:", for_="prompt"),
+            Input(id="prompt", name="prompt", required=True, cls="input"),
+
+            Label("Learning Rate:"),
+            Input(name="learning_rate", value="2e-6", cls="input"),
+
+            Label("Training Steps:", for_="steps"),
+            Input(id="steps", name="steps", type="number", required=True, cls="input"),
+
+            Label("Train Batch Size:", for_="trainBatchSize"),
+            Input(id="trainBatchSize", name="train_batch_size", type="number", required=True, cls="input"),
+
+            Label("Validation Image (JPG):"),
+            Input(name="control_image", type="file", accept=".jpg,.jpeg", required=True, cls="input"),
+
+            Label("Hub Model ID:"),
+            Input(name="hub_model_id", required=True, cls="input"),
+
+            Label("Training Script:"),
+            Input(name="training_script", value="train_controlnet_flux.py", required=True, cls="input"),
+
+            Button("Start Training", type="submit", cls="button"),
+
+            method="post",
+            enctype="multipart/form-data",
+            id="trainingForm",
+            cls="form"
+        ),
+        Div(id="trainingStatus", cls="status"),
+        Script("""
+                document.getElementById("controlnetModel").addEventListener("change", function () {
+                    const selected = this.options[this.selectedIndex];
+                    document.getElementById("controlnetType").value = selected.dataset.type;
+                    document.getElementById("prompt").value = selected.dataset.prompt;
+                    document.getElementById("steps").value = selected.dataset.steps;
+                    document.getElementById("trainBatchSize").value = selected.dataset.batch;
+                });
+
+                document.getElementById("trainingForm").addEventListener("submit", async function (e) {
+                    e.preventDefault();
+                    const formData = new FormData(this);
+                    const response = await fetch("/train", { method: "POST", body: formData });
+                    const result = await response.json();
+                    if (result.status === "ok") {
+                        // Start polling for progress
+                        const interval = setInterval(async () => {
+                            const res = await fetch("/train_status");
+                            const status = await res.json();
+                            document.getElementById("trainingStatus").innerText =
+                                status.message + " (" + status.progress + "%)";
+                            if (status.done) {
+                                clearInterval(interval);
+                                window.location.href = "/inference";
+                            }
+                        }, 1000);
+                    } else {
+                        alert(result.error);
+                    }
+                });
+            """)
+    )
+    return str(base_layout("ControlNet training", content,
+                           navigation=A("Back to Inference Menu", href=url_for('inference')))), 200
+
+@app.route("/training_status")
+def training_status():
+    return jsonify(training_status)
 
 @app.route('/training/controlnet')
 def training_controlnet():

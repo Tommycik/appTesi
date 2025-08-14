@@ -157,6 +157,6 @@ def hed_from_path(input_path, output_path=None):
     output_image = (tenOutput.clip(0.0, 1.0).numpy(force=True)
                     .transpose(1, 2, 0)[:, :, 0] * 255.0).astype(np.uint8)
 
-    output_path = output_path or input_path.replace(".png", "_hed.png")
+    output_path = output_path or input_path.replace(".jpg", "_hed.jpg")
     PIL.Image.fromarray(output_image).save(output_path)
     return output_path
