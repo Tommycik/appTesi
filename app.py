@@ -1,3 +1,4 @@
+import tempfile
 import uuid
 from io import BytesIO
 
@@ -585,7 +586,7 @@ def run_training(args):
 def training():
     if request.method == "POST":
         try:
-            controlnet_model = request.form["controlnet_model"]
+            controlnet_model = model_map[request.form["controlnet_model"]]
             controlnet_type = request.form["controlnet_type"]
             prompt = request.form["prompt"]
             learning_rate = request.form.get("learning_rate", "2e-6")
@@ -593,7 +594,22 @@ def training():
             train_batch_size = request.form["train_batch_size"]
             hub_model_id = request.form["hub_model_id"]
             training_script = request.form["training_script"]
-
+            n4 = request.form["N4"]
+            gradient_accumulation_steps=None
+            if "gradient_accumulation_steps" in request.form:
+                gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
+            resolution = None
+            if "resolution" in request.form:
+                resolution = request.form["resolution"]
+            checkpointing_steps = None
+            if "checkpointing_steps" in request.form:
+                checkpointing_steps = request.form["checkpointing_steps"]
+            validation_steps = None
+            if "validation_steps" in request.form:
+                validation_steps = request.form["validation_steps"]
+            mixed_precision = None
+            if "mixed_precision" in request.form:
+                mixed_precision = request.form["mixed_precision"]
             control_img_path = None
             if "control_image" in request.files:
                 img_file = request.files["control_image"]
@@ -617,17 +633,20 @@ def training():
         Form(
             Label("ControlNet Model:", for_="controlnetModel"),
             Select(
-                Option("Flux ControlNet HED",
-                       value="Xlabs-AI/flux-controlnet-hed-diffusers",
-                       data_type="hed",
-                       data_prompt="photo of a city skyline",
-                       data_steps="1000",
-                       data_batch="2"),
-                Option("Flux ControlNet Canny",
-                       value="Xlabs-AI/flux-controlnet-canny-diffusers",
-                       data_type="canny",
+                Option("ControlNet Canny", value="standard",data_type="canny",
                        data_prompt="a sports car on a mountain road",
                        data_steps="1500",
+                       data_N4=False,
+                       data_batch="4"),
+                Option("ControlNet HED", value="hed", data_type="hed",
+                       data_prompt="photo of a city skyline",
+                       data_steps="1000",
+                       data_N4=False,
+                       data_batch="2"),
+                Option("ControlNet Canny reduced", value="reduced",data_type="canny",
+                       data_prompt="a sports car on a mountain road",
+                       data_steps="1500",
+                       data_N4=True,
                        data_batch="4"),
                 id="controlnetModel",
                 name="controlnet_model",
@@ -639,6 +658,14 @@ def training():
 
             Label("Prompt:", for_="prompt"),
             Input(id="prompt", name="prompt", required=True, cls="input"),
+
+            Label("N4:", for_="N4"),
+            Select(
+                Option("No", value=False),
+                Option("Yes", value=True),
+                id="N4",
+                name="N4",
+                cls="input"),
 
             Label("Learning Rate:"),
             Input(name="learning_rate", value="2e-6", cls="input"),
@@ -655,9 +682,6 @@ def training():
             Label("Hub Model ID:"),
             Input(name="hub_model_id", required=True, cls="input"),
 
-            Label("Training Script:"),
-            Input(name="training_script", value="train_controlnet_flux.py", required=True, cls="input"),
-
             Button("Start Training", type="submit", cls="button"),
 
             method="post",
@@ -668,12 +692,17 @@ def training():
         Div(id="trainingStatus", cls="status"),
         Script("""
                 document.getElementById("controlnetModel").addEventListener("change", function () {
-                    const selected = this.options[this.selectedIndex];
-                    document.getElementById("controlnetType").value = selected.dataset.type;
-                    document.getElementById("prompt").value = selected.dataset.prompt;
-                    document.getElementById("steps").value = selected.dataset.steps;
-                    document.getElementById("trainBatchSize").value = selected.dataset.batch;
-                });
+                const selected = this.options[this.selectedIndex];
+                document.getElementById("controlnetType").value = selected.dataset.type;
+                document.getElementById("prompt").value = selected.dataset.prompt;
+                document.getElementById("steps").value = selected.dataset.steps;
+                document.getElementById("trainBatchSize").value = selected.dataset.batch;
+            
+                // Auto-set N4 dropdown if the option has data_n4
+                if (selected.dataset.n4) {
+                    document.getElementById("N4").value = selected.dataset.n4;
+                }
+            });
 
                 document.getElementById("trainingForm").addEventListener("submit", async function (e) {
                     e.preventDefault();
