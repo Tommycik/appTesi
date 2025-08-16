@@ -663,21 +663,25 @@ def training():
         Form(
             Label("ControlNet Model:", for_="controlnetModel"),
             Select(
+                #todo auto complete values missing values
                 Option("ControlNet Canny", value="standard",data_type="canny",
                        data_prompt="a sports car on a mountain road",
                        data_steps="1500",
                        data_N4=False,
-                       data_batch="4"),
+                       data_steps="1500",
+                       data_trainBatchSize="4"),
                 Option("ControlNet HED", value="hed", data_type="hed",
                        data_prompt="photo of a city skyline",
                        data_steps="1000",
                        data_N4=False,
-                       data_batch="2"),
+                       data_steps="1500",
+                       data_trainBatchSize="2"),
                 Option("ControlNet Canny reduced", value="reduced",data_type="canny",
                        data_prompt="a sports car on a mountain road",
                        data_steps="1500",
                        data_N4=True,
-                       data_batch="4"),
+                       data_steps="1500",
+                       data_trainBatchSize="4"),
                 id="controlnetModel",
                 name="controlnet_model",
                 cls="input"
