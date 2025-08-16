@@ -17,7 +17,17 @@ import cv2
 import numpy as np
 from werkzeug.utils import secure_filename
 import re
+from huggingface_hub import HfApi
 
+#todo use this to use parameters finference and training. update the traing to configure the yaml and see the various model
+def get_model_config(model_id):
+    api = HfApi()
+    try:
+        info = api.model_info(model_id)
+        return info.card_data or {}  # pulls model card metadata (YAML/JSON)
+    except Exception as e:
+        print(f"Could not fetch config: {e}")
+        return {}
 def scp_to_lambda(local_path, remote_path):
     import paramiko
     from scp import SCPClient
@@ -47,7 +57,7 @@ sys.stderr.reconfigure(encoding='utf-8')
 load_dotenv()
 
 #serializing request to lambda
-inference_queue = queue.Queue()
+work_queue = queue.Queue()
 # Dictionary to store results, keyed by a unique job ID
 results_db = {}
 # A lock to serialize the SSH command
@@ -130,7 +140,7 @@ class SSHManager:
 def worker():
     print("Worker thread has started and is ready to process jobs.")
     while True:
-        job = inference_queue.get()
+        job = work_queue.get()
         if job is None:
             break
 
@@ -140,7 +150,6 @@ def worker():
         try:
             print(f"[{time.ctime()}] Worker: Starting job {job_id}")
 
-            # Added the timeout parameter for robust execution
             output, errors = ssh_manager.run_command(command)
 
             print(f"[{time.ctime()}] Worker: Job {job_id} completed.")
@@ -148,28 +157,35 @@ def worker():
             print("SSH ERRORS:", errors)
 
             result_url = None
-            # Use a more robust check for a URL
             url_match = re.search(r'(https?://\S+)', output)
             if url_match:
                 result_url = url_match.group(0)
 
-            # --- Corrected logic starts here ---
-            # 1. First, check for a successful result URL
             if result_url:
-                results_db[job_id] = result_url
-            # 2. If no URL is found, then check for actual errors
+                # inference complete
+                results_db[job_id] = {"status": "done", "output": result_url}
+
+            elif "Step" in output:
+                # training log: parse progress
+                match = re.search(r"Step (\d+)/(\d+)", output)
+                if match:
+                    current, total = map(int, match.groups())
+                    progress = int((current / total) * 100)
+                    results_db[job_id] = {"status": "running", "progress": progress}
+                else:
+                    results_db[job_id] = {"status": "running", "message": output[-500:]}
+
             elif errors:
-                results_db[job_id] = f"SSH Command Failed: {errors}"
-            # 3. Handle the case where there's no URL and no error (unexpected)
+                results_db[job_id] = {"status": "error", "message": errors}
+
             else:
-                results_db[job_id] = f"Inference completed, but no valid URL was returned. Output: {output}"
-            # --- Corrected logic ends here ---
+                results_db[job_id] = {"status": "unknown", "message": output[-500:]}
 
         except Exception as e:
             print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
-            results_db[job_id] = f"Internal server error: {e}"
+            results_db[job_id] = {"status": "error", "message": str(e)}
         finally:
-            inference_queue.task_done()
+            work_queue.task_done()
 
 worker_thread = threading.Thread(target=worker, daemon=True)
 worker_thread.start()
@@ -335,8 +351,8 @@ def connect_lambda():
 
     return redirect(url_for('index'))
 
-@app.route('/inference_result/<job_id>', methods=["GET"])
-def get_inference_result(job_id):
+@app.route('/job_result/<job_id>', methods=["GET"])
+def get_result(job_id):
     result = results_db.get(job_id)
     if result is None:
         return jsonify({"status": "pending"})
@@ -375,6 +391,8 @@ def inference():
                 image.save(control_image_path)
                 remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.jpg"
                 scp_to_lambda(control_image_path, remote_control_path)
+                if control_image_path and os.path.exists(control_image_path):
+                    os.remove(control_image_path)
         # Call Lambda via SSH
         command = (
             f"export CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} &&"
@@ -387,7 +405,7 @@ def inference():
         if remote_control_path:
             command += f" --control_image {remote_control_path} "
         job_id = str(uuid.uuid4())
-        inference_queue.put({"job_id": job_id, "command": command})
+        work_queue.put({"job_id": job_id, "command": command})
 
         content = Div(
             H2("Inference Job Submitted"),
@@ -396,7 +414,7 @@ def inference():
             Div("Waiting for result...", id="result-section"),
             Script(f"""
             async function pollResult() {{
-                const res = await fetch("{url_for('get_inference_result', job_id=job_id)}");
+                const res = await fetch("{url_for('get_result', job_id=job_id)}");
                 const data = await res.json();
                 if (data.status === "done") {{
                     let resultDiv = document.getElementById("result-section");
@@ -560,74 +578,86 @@ def preprocess_image():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)})
 
-training_status = {
-    "running": False,
-    "progress": 0,
-    "message": "",
-    "done": False
-}
-def run_training(args):
-    training_status["running"] = True
-    training_status["progress"] = 0
-    training_status["message"] = "Starting training..."
-    training_status["done"] = False
-
-    # Simulate progress tracking (replace with real parsing of training logs)
-    for i in range(1, 101):
-        training_status["progress"] = i
-        training_status["message"] = f"Training... {i}%"
-        time.sleep(0.5)  # simulate time per step
-
-    training_status["running"] = False
-    training_status["done"] = True
-    training_status["message"] = "Training complete"
-
+#todo permettere la creazione di nuovi modelli
 @app.route('/training', methods=["GET", "POST"])
 def training():
     if request.method == "POST":
-        try:
-            controlnet_model = model_map[request.form["controlnet_model"]]
-            controlnet_type = request.form["controlnet_type"]
-            prompt = request.form["prompt"]
-            learning_rate = request.form.get("learning_rate", "2e-6")
-            steps = request.form["steps"]
-            train_batch_size = request.form["train_batch_size"]
-            hub_model_id = request.form["hub_model_id"]
-            training_script = request.form["training_script"]
-            n4 = request.form["N4"]
-            gradient_accumulation_steps=None
-            if "gradient_accumulation_steps" in request.form:
-                gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
-            resolution = None
-            if "resolution" in request.form:
-                resolution = request.form["resolution"]
-            checkpointing_steps = None
-            if "checkpointing_steps" in request.form:
-                checkpointing_steps = request.form["checkpointing_steps"]
-            validation_steps = None
-            if "validation_steps" in request.form:
-                validation_steps = request.form["validation_steps"]
-            mixed_precision = None
-            if "mixed_precision" in request.form:
-                mixed_precision = request.form["mixed_precision"]
-            control_img_path = None
-            if "control_image" in request.files:
-                img_file = request.files["control_image"]
-                if img_file and img_file.filename.lower().endswith((".jpg", ".jpeg")):
-                    tmp_dir = tempfile.mkdtemp()
-                    control_img_path = os.path.join(tmp_dir, img_file.filename)
-                    img_file.save(control_img_path)
-                else:
-                    return jsonify({"status": "error", "error": "Only JPG allowed"})
 
-            # Normally you'd call subprocess.Popen here, but we'll simulate
-            thread = threading.Thread(target=run_training, args=([training_script]))
-            thread.start()
+        controlnet_model = model_map[request.form["controlnet_model"]]
+        controlnet_type = request.form["controlnet_type"]
+        learning_rate = request.form.get("learning_rate", "2e-6")
+        steps = request.form["steps"]
+        train_batch_size = request.form["train_batch_size"]
+        hub_model_id = request.form["hub_model_id"]
+        n4 = request.form["N4"]
+        gradient_accumulation_steps=None
+        if "gradient_accumulation_steps" in request.form:
+            gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
+        resolution = None
+        if "resolution" in request.form:
+            resolution = request.form["resolution"]
+        checkpointing_steps = None
+        if "checkpointing_steps" in request.form:
+            checkpointing_steps = request.form["checkpointing_steps"]
+        validation_steps = None
+        if "validation_steps" in request.form:
+            validation_steps = request.form["validation_steps"]
+        mixed_precision = None
+        if "mixed_precision" in request.form:
+            mixed_precision = request.form["mixed_precision"]
+        prompt = None
+        if 'validation_image' in request.files:
+            val_img = request.files['validation_image']
+            if val_img and val_img.filename:
+                filename = secure_filename(val_img.filename)
+                validation_image_path = os.path.join(tempfile.gettempdir(), filename)
+                val_img.save(validation_image_path)
+                remote_validation_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}_{filename}"
+                scp_to_lambda(validation_image_path, remote_validation_path)
+                prompt = request.form.get("prompt")  # only then get prompt
+                if validation_image_path and os.path.exists(validation_image_path):
+                    os.remove(validation_image_path)
 
-            return jsonify({"status": "ok", "message": "Training started"})
-        except Exception as e:
-            return jsonify({"status": "error", "error": str(e)})
+        # Normally you'd call subprocess.Popen here, but we'll simulate
+        command = (
+            f"export HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} &&"
+            f"source venv_flux/bin/activate && cd tesiControlNetFlux/Src && python3 scripts/controlnet_training_api.py "
+            f" --learning_rate {learning_rate} --resolution {resolution} --validation_steps {validation_steps} --mixed_precision {mixed_precision} --checkpointing_steps {checkpointing_steps} --steps {steps} --gradient_accumulation_steps {gradient_accumulation_steps} --hub_model_id {hub_model_id} --controlnet_model {controlnet_model} --controlnet_type {controlnet_type} --N4 {n4} --train_batch_size {train_batch_size}"
+        )
+        if prompt:
+            command += f' --prompt "{prompt}" '
+        if remote_validation_path:
+            command += f" --validation_image {remote_validation_path} "
+        job_id = str(uuid.uuid4())
+        work_queue.put({"job_id": job_id, "command": command})
 
+        content = Div(
+            H2("trainig Job Submitted"),
+            P(f"Model: {hub_model_id}"),
+            P(f"Job ID: {job_id}"),
+            Div("Waiting for training...", id="result-section"),
+            #todo polling training
+            Script(f"""
+                    async function pollResult() {{
+                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
+                        const data = await res.json();
+                        if (data.status === "done") {{
+                            let resultDiv = document.getElementById("result-section");
+                            if (data.output.startsWith("http")) {{
+                                resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
+                            }} else {{
+                                resultDiv.innerHTML = "<p>" + data.output + "</p>";
+                            }}
+                        }} else {{
+                            setTimeout(pollResult, 2000);
+                        }}
+                    }}
+                    pollResult();
+                    """)
+        )
+
+        return str(
+            base_layout("Waiting for Training", content, navigation=A("Back to Home", href=url_for('index')))), 200
     content = Div(
         Div("ControlNet Training", cls="title"),
         Form(
@@ -656,9 +686,6 @@ def training():
             Label("ControlNet Type:", for_="controlnetType"),
             Input(id="controlnetType", name="controlnet_type", required=True, cls="input"),
 
-            Label("Prompt:", for_="prompt"),
-            Input(id="prompt", name="prompt", required=True, cls="input"),
-
             Label("N4:", for_="N4"),
             Select(
                 Option("No", value=False),
@@ -677,8 +704,14 @@ def training():
             Input(id="trainBatchSize", name="train_batch_size", type="number", required=True, cls="input"),
 
             Label("Validation Image (JPG):"),
-            Input(name="control_image", type="file", accept=".jpg,.jpeg", required=True, cls="input"),
+            Input(name="validation_image", type="file", accept=".jpg,.jpeg", required=True, cls="input"),
 
+            Div(
+                Label("Prompt:", for_="prompt"),
+                Input(id="prompt", name="prompt", cls="input"),
+                id="promptWrapper",
+                style="display:none;"
+            ),
             Label("Hub Model ID:"),
             Input(name="hub_model_id", required=True, cls="input"),
 
@@ -703,52 +736,22 @@ def training():
                     document.getElementById("N4").value = selected.dataset.n4;
                 }
             });
+            
+            document.getElementById("validationImage").addEventListener("change", function () {
+            const wrapper = document.getElementById("promptWrapper");
+            if (this.files.length > 0) {
+                wrapper.style.display = "block";
+                document.getElementById("prompt").setAttribute("required", "true");
+            } else {
+                wrapper.style.display = "none";
+                document.getElementById("prompt").removeAttribute("required");
+            }
+        });
 
-                document.getElementById("trainingForm").addEventListener("submit", async function (e) {
-                    e.preventDefault();
-                    const formData = new FormData(this);
-                    const response = await fetch("/train", { method: "POST", body: formData });
-                    const result = await response.json();
-                    if (result.status === "ok") {
-                        // Start polling for progress
-                        const interval = setInterval(async () => {
-                            const res = await fetch("/train_status");
-                            const status = await res.json();
-                            document.getElementById("trainingStatus").innerText =
-                                status.message + " (" + status.progress + "%)";
-                            if (status.done) {
-                                clearInterval(interval);
-                                window.location.href = "/inference";
-                            }
-                        }, 1000);
-                    } else {
-                        alert(result.error);
-                    }
-                });
             """)
     )
     return str(base_layout("ControlNet training", content,
                            navigation=A("Back to Inference Menu", href=url_for('inference')))), 200
-
-@app.route("/training_status")
-def training_status():
-    return jsonify(training_status)
-
-@app.route('/training/controlnet')
-def training_controlnet():
-    return
-
-
-@app.route('/training/controlnetReduced')
-def training_controlnet_reduced():
-    return
-
-
-@app.route('/training/controlnetHed')
-def training_controlnet_hed():
-    return
-
-
 @app.route('/results')
 def results():
     return
