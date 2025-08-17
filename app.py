@@ -17,17 +17,47 @@ import cv2
 import numpy as np
 from werkzeug.utils import secure_filename
 import re
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
+import yaml
 
+
+HF_NAMESPACE = "tommycik"
+api = HfApi()
 #todo use this to use parameters finference and training. update the traing to configure the yaml and see the various model
-def get_model_config(model_id):
-    api = HfApi()
+def list_repo_models(namespace=HF_NAMESPACE):
+    """
+    List all models in the HuggingFace namespace.
+    Returns list of dicts: {id, card_data}
+    """
+    models = api.list_models(author=namespace)
+    result = []
+    for m in models:
+        try:
+            info = api.model_info(m.modelId)
+            result.append({
+                "id": m.modelId,
+                "card_data": info.card_data or {}
+            })
+        except Exception as e:
+            print(f"Skipping {m.modelId}: {e}")
+    return result
+
+def get_model_parameters(model_id):
+    """
+    Load training_config.yaml from HF repo if available.
+    """
     try:
-        info = api.model_info(model_id)
-        return info.card_data or {}  # pulls model card metadata (YAML/JSON)
+        yaml_path = hf_hub_download(repo_id=model_id,
+                                    filename="training_config.yaml",
+                                    repo_type="model")
+        with open(yaml_path, "r") as f:
+            params = yaml.safe_load(f)
+        return params
     except Exception as e:
-        print(f"Could not fetch config: {e}")
+        print(f"No config for {model_id}: {e}")
         return {}
+
+
 def scp_to_lambda(local_path, remote_path):
     import paramiko
     from scp import SCPClient
@@ -630,7 +660,31 @@ def training():
             command += f" --validation_image {remote_validation_path} "
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
+        train_config = {
+            "controlnet_type": controlnet_type,
+            "N4": n4,
+            "mixed_precision": mixed_precision,
+            "steps": steps,
+            "train_batch_size": train_batch_size,
+            "learning_rate": learning_rate,
+            "resolution": resolution,
+            "checkpointing_steps": checkpointing_steps,
+            "validation_steps": validation_steps,
+            "validation_image": remote_validation_path or "default",
+            "hub_model_id": hub_model_id,
+        }
 
+        yaml_path = os.path.join(output_dir, "training_config.yaml")
+        with open(yaml_path, "w") as f:
+            yaml.safe_dump(train_config, f)
+
+        api = HfApi()
+        api.upload_file(
+            path_or_fileobj=yaml_path,
+            path_in_repo="training_config.yaml",
+            repo_id=args.hub_model_id,
+            repo_type="model"
+        )
         content = Div(
             H2("trainig Job Submitted"),
             P(f"Model: {hub_model_id}"),

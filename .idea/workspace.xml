@@ -129,7 +129,8 @@
       <workItem from="1754329701131" duration="3944000" />
       <workItem from="1755167152904" duration="5984000" />
       <workItem from="1755194097419" duration="602000" />
-      <workItem from="1755375842480" duration="5790000" />
+      <workItem from="1755375842480" duration="5955000" />
+      <workItem from="1755425348180" duration="953000" />
     </task>
     <task id="LOCAL-00001" summary="flask app">
       <option name="closed" value="true" />
@@ -211,7 +212,23 @@
       <option name="project" value="LOCAL" />
       <updated>1755170151717</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="training">
+      <option name="closed" value="true" />
+      <created>1755382871036</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1755382871036</updated>
+    </task>
+    <task id="LOCAL-00012" summary="training">
+      <option name="closed" value="true" />
+      <created>1755383005979</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1755383005979</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
