@@ -389,7 +389,7 @@ def get_result(job_id):
     result = results_db.get(job_id)
     if result is None:
         return jsonify({"status": "pending"})
-    return jsonify({"status": "done", "output": result})
+    return jsonify(result)
 
 @app.route('/inference', methods=["GET", "POST"])
 def inference():
@@ -719,20 +719,26 @@ def training():
             Div("Waiting for training...", id="result-section"),
             Script(f"""
                     async function pollResult() {{
-                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
-                        const data = await res.json();
-                        if (data.status === "done") {{
-                            let resultDiv = document.getElementById("result-section");
-                            if (data.output.startsWith("http")) {{
-                                resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
+                          const res = await fetch("{{ url_for('get_result', job_id=job_id) }}");
+                          const data = await res.json();
+                          let resultDiv = document.getElementById("result-section");
+                        
+                          if (data.status === "done") {{
+                            if (typeof data.output === "string" && data.output.startsWith("http")) {{
+                              resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
                             }} else {{
-                                resultDiv.innerHTML = "<p>" + data.output + "</p>";
+                              resultDiv.innerHTML = "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
                             }}
-                        }} else {{
+                          }} else if (data.status === "running") {{
+                            resultDiv.innerHTML = `Training... ${{data.progress || 0}}%`;
                             setTimeout(pollResult, 2000);
+                          }} else if (data.status === "error") {{
+                            resultDiv.innerHTML = `<span style="color:red">Error: ${{data.message || 'unknown'}}</span>`;
+                          }} else {{
+                            setTimeout(pollResult, 2000);
+                          }}
                         }}
-                    }}
-                    pollResult();
+                        pollResult();
             """)
         )
 
