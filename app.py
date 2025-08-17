@@ -395,15 +395,11 @@ def inference():
         scale = request.form.get('scale', 0.2)
         steps = request.form.get('steps', 50)
         guidance = request.form.get('guidance', 6.0)
-        model = request.form.get('model', 'standard')
-
-
-        model_type = "canny"
-        n4 = False
-        if model == "hed":
-            model_type = "hed"
-        elif model == "reduced":
-            n4 = True
+        model_id = request.form["model"]
+        params = get_model_parameters(model_id)
+        model_type = params.get("controlnet_type", "canny")
+        n4 = params.get("N4", False)
+        precision = params.get("mixed_precision", "fp16")#todo aggiungere questo controllo
         control_image_path = None
         remote_control_path = None
 
@@ -430,7 +426,7 @@ def inference():
             f"export CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} &&"
             f"export CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} &&"
             f"source venv_flux/bin/activate && cd tesiControlNetFlux/Src && python3 scripts/controlnet_infer_api.py "
-            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_map[model]} --N4 {n4} --controlnet_type {model_type}"
+            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_id} --N4 {n4} --controlnet_type {model_type}"
         )
         if remote_control_path:
             command += f" --control_image {remote_control_path} "
@@ -463,15 +459,15 @@ def inference():
 
         return str(
             base_layout("Waiting for Inference", content, navigation=A("Back to Home", href=url_for('index')))), 200
+    models = list_repo_models()
+
+    options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
 
     # GET method: render form
     form = Form(
-        Select(
-            Option("ControlNet Canny", value="standard"),
-            Option("ControlNet HED", value="hed"),
-            Option("ControlNet Canny reduced", value="reduced"),
-            id="model"
-        ),
+        Select(*options, id="model", name="model"),
+        Label("Prompt:"),
+        Input(type="text", name="prompt", required=True),
         Label("Prompt:"),
         Input(type="text", name="prompt", required=True),
         Div(
@@ -674,7 +670,7 @@ def training():
             "hub_model_id": hub_model_id,
         }
 
-        yaml_path = os.path.join(output_dir, "training_config.yaml")
+        yaml_path = os.path.join(tempfile.gettempdir(), "training_config.yaml")
         with open(yaml_path, "w") as f:
             yaml.safe_dump(train_config, f)
 
@@ -682,7 +678,7 @@ def training():
         api.upload_file(
             path_or_fileobj=yaml_path,
             path_in_repo="training_config.yaml",
-            repo_id=args.hub_model_id,
+            repo_id=hub_model_id,
             repo_type="model"
         )
         content = Div(
@@ -712,9 +708,29 @@ def training():
 
         return str(
             base_layout("Waiting for Training", content, navigation=A("Back to Home", href=url_for('index')))), 200
+    models = list_repo_models()
     content = Div(
         Div("ControlNet Training", cls="title"),
         Form(
+            Label("Mode:"),
+            Select(
+                Option("Fine-tune existing model", value="existing"),
+                Option("Create new model", value="new"),
+                id="mode", name="mode"
+            ),
+
+            Div(
+                Label("Existing Model:"),
+                Select(*[Option(m["id"].split("/")[-1], value=m["id"]) for m in models],
+                       id="existingModel", name="existing_model"),
+                id="existingModelWrapper"
+            ),
+
+            Div(
+                Label("New Model Name (Hub ID suffix):"),
+                Input(name="new_model_name", id="newModelName", cls="input"),
+                id="newModelWrapper", style="display:none;"
+            ),
             Label("ControlNet Model:", for_="controlnetModel"),
             Select(
                 #todo auto complete values missing values
@@ -763,7 +779,8 @@ def training():
 
             Label("Validation Image (JPG):"),
             Input(name="validation_image", type="file", accept=".jpg,.jpeg", required=True, cls="input"),
-
+            Label("Mixed Precision:"),
+            Select(Option("fp16", value="fp16"), Option("bf16", value="bf16"), name="mixed_precision"),
             Div(
                 Label("Prompt:", for_="prompt"),
                 Input(id="prompt", name="prompt", cls="input"),
