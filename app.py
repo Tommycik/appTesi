@@ -1,7 +1,9 @@
 import tempfile
 import uuid
 from io import BytesIO
-
+import os
+import sys
+import base64
 import cloudinary
 from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, make_response, jsonify
 import requests
@@ -646,6 +648,7 @@ def training():
         if "mixed_precision" in request.form:
             mixed_precision = request.form["mixed_precision"]
         prompt = None
+        remote_validation_path = None
         if 'validation_image' in request.files:
             val_img = request.files['validation_image']
             if val_img and val_img.filename:
