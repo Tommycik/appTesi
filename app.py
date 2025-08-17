@@ -1,3 +1,4 @@
+import shlex
 import tempfile
 import uuid
 from io import BytesIO
@@ -470,8 +471,6 @@ def inference():
         Select(*options, id="model", name="model"),
         Label("Prompt:"),
         Input(type="text", name="prompt", required=True),
-        Label("Prompt:"),
-        Input(type="text", name="prompt", required=True),
         Div(
             Label("Upload Images:"),
             Input(type="file", id="uploadInput", accept="image/*", multiple=True),
@@ -662,16 +661,30 @@ def training():
                 if validation_image_path and os.path.exists(validation_image_path):
                     os.remove(validation_image_path)
 
-        # Normally you'd call subprocess.Popen here, but we'll simulate
-        command = (
-            f"export HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} &&"
-            f"source venv_flux/bin/activate && cd tesiControlNetFlux/Src && python3 scripts/controlnet_training_api.py "
-            f" --learning_rate {learning_rate} --resolution {resolution} --validation_steps {validation_steps} --mixed_precision {mixed_precision} --checkpointing_steps {checkpointing_steps} --steps {steps} --gradient_accumulation_steps {gradient_accumulation_steps} --hub_model_id {hub_model_id} --controlnet_model {controlnet_model} --controlnet_type {controlnet_type} --N4 {n4} --train_batch_size {train_batch_size}"
-        )
-        if prompt:
-            command += f' --prompt "{prompt}" '
-        if remote_validation_path:
-            command += f" --validation_image {remote_validation_path} "
+        cmd = [
+            f"export HUGGINGFACE_TOKEN={shlex.quote(str(HUGGINGFACE_TOKEN or ''))}", "&&",
+            "source venv_flux/bin/activate && cd tesiControlNetFlux/Src &&",
+            "python3 scripts/controlnet_training_api.py",
+            f"--learning_rate {shlex.quote(str(learning_rate))}",
+            f"--steps {shlex.quote(str(steps))}",
+            f"--hub_model_id {shlex.quote(hub_model_id)}",
+            f"--controlnet_model {shlex.quote(controlnet_model)}",
+            f"--controlnet_type {shlex.quote(controlnet_type)}",
+            f"--N4 {str(bool(n4)).lower()}",
+            f"--train_batch_size {shlex.quote(str(train_batch_size))}",
+        ]
+
+        # only include optional ones when present
+        if resolution:               cmd.append(f"--resolution {shlex.quote(str(resolution))}")
+        if validation_steps:         cmd.append(f"--validation_steps {shlex.quote(str(validation_steps))}")
+        if mixed_precision:          cmd.append(f"--mixed_precision {shlex.quote(str(mixed_precision))}")
+        if checkpointing_steps:      cmd.append(f"--checkpointing_steps {shlex.quote(str(checkpointing_steps))}")
+        if gradient_accumulation_steps:
+            cmd.append(f"--gradient_accumulation_steps {shlex.quote(str(gradient_accumulation_steps))}")
+        if remote_validation_path:   cmd.append(f"--validation_image {shlex.quote(remote_validation_path)}")
+        if prompt:                   cmd.append(f"--prompt {shlex.quote(prompt)}")
+
+        command = " ".join(cmd)
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
         train_config = {
