@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="training">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-    </list>
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="training" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -131,7 +128,7 @@
       <workItem from="1755194097419" duration="602000" />
       <workItem from="1755375842480" duration="5955000" />
       <workItem from="1755425348180" duration="1874000" />
-      <workItem from="1755462461745" duration="525000" />
+      <workItem from="1755462461745" duration="1028000" />
     </task>
     <task id="LOCAL-00001" summary="flask app">
       <option name="closed" value="true" />
@@ -245,7 +242,15 @@
       <option name="project" value="LOCAL" />
       <updated>1755434313793</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="training">
+      <option name="closed" value="true" />
+      <created>1755463119721</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1755463119721</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

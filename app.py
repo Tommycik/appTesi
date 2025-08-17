@@ -23,7 +23,7 @@ import yaml
 
 HF_NAMESPACE = "tommycik"
 api = HfApi()
-#todo use this to use parameters finference and training. update the traing to configure the yaml and see the various model
+
 def list_repo_models(namespace=HF_NAMESPACE):
     """
     List all models in the HuggingFace namespace.
@@ -608,13 +608,27 @@ def preprocess_image():
 @app.route('/training', methods=["GET", "POST"])
 def training():
     if request.method == "POST":
+        mode = request.form["mode"]
+
+        if mode == "existing":
+            model_id = request.form["existing_model"]
+            hub_model_id = model_id
+            # allow possible override
+        else:  # new model
+            new_name = request.form["new_model_name"]
+            hub_model_id = f"{HF_NAMESPACE}/{new_name}"
+
+            # check existence
+            existing = [m["id"] for m in list_repo_models()]
+            if hub_model_id in existing:
+                flash("Model with this name already exists on HuggingFace!", "error")
+                return redirect(url_for("training"))
 
         controlnet_model = model_map[request.form["controlnet_model"]]
         controlnet_type = request.form["controlnet_type"]
         learning_rate = request.form.get("learning_rate", "2e-6")
         steps = request.form["steps"]
         train_batch_size = request.form["train_batch_size"]
-        hub_model_id = request.form["hub_model_id"]
         n4 = request.form["N4"]
         gradient_accumulation_steps=None
         if "gradient_accumulation_steps" in request.form:
