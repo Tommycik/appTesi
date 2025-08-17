@@ -608,7 +608,6 @@ def preprocess_image():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)})
 
-#todo permettere la creazione di nuovi modelli
 @app.route('/training', methods=["GET", "POST"])
 def training():
     if request.method == "POST":
