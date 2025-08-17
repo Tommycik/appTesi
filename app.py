@@ -686,7 +686,6 @@ def training():
             P(f"Model: {hub_model_id}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for training...", id="result-section"),
-            #todo polling training
             Script(f"""
                     async function pollResult() {{
                         const res = await fetch("{url_for('get_result', job_id=job_id)}");
@@ -703,12 +702,30 @@ def training():
                         }}
                     }}
                     pollResult();
-                    """)
+            """)
         )
 
         return str(
             base_layout("Waiting for Training", content, navigation=A("Back to Home", href=url_for('index')))), 200
     models = list_repo_models()
+    options = []
+    for m in models:
+        model_id = m["id"]
+        params = get_model_parameters(model_id)
+        options.append(
+            Option(
+                model_id.split("/")[-1],
+                value=model_id,
+                **{
+                    "data_controlnet_type": params.get("controlnet_type", "canny"),
+                    "data_N4": params.get("N4", False),
+                    "data_steps": params.get("steps", 1000),
+                    "data_train_batch_size": params.get("train_batch_size", 2),
+                    "data_learning_rate": params.get("learning_rate", "2e-6"),
+                    "data_mixed_precision": params.get("mixed_precision", "fp16"),
+                }
+            )
+        )
     content = Div(
         Div("ControlNet Training", cls="title"),
         Form(
@@ -721,7 +738,7 @@ def training():
 
             Div(
                 Label("Existing Model:"),
-                Select(*[Option(m["id"].split("/")[-1], value=m["id"]) for m in models],
+                Select(*options,
                        id="existingModel", name="existing_model"),
                 id="existingModelWrapper"
             ),
@@ -731,34 +748,9 @@ def training():
                 Input(name="new_model_name", id="newModelName", cls="input"),
                 id="newModelWrapper", style="display:none;"
             ),
-            Label("ControlNet Model:", for_="controlnetModel"),
-            Select(
-                #todo auto complete values missing values
-                Option("ControlNet Canny", value="standard",data_type="canny",
-                       data_prompt="a sports car on a mountain road",
-                       data_steps="1500",
-                       data_N4=False,
-                       data_steps="1500",
-                       data_trainBatchSize="4"),
-                Option("ControlNet HED", value="hed", data_type="hed",
-                       data_prompt="photo of a city skyline",
-                       data_steps="1000",
-                       data_N4=False,
-                       data_steps="1500",
-                       data_trainBatchSize="2"),
-                Option("ControlNet Canny reduced", value="reduced",data_type="canny",
-                       data_prompt="a sports car on a mountain road",
-                       data_steps="1500",
-                       data_N4=True,
-                       data_steps="1500",
-                       data_trainBatchSize="4"),
-                id="controlnetModel",
-                name="controlnet_model",
-                cls="input"
-            ),
 
             Label("ControlNet Type:", for_="controlnetType"),
-            Input(id="controlnetType", name="controlnet_type", required=True, cls="input"),
+            Input(id="controlnet_type", name="controlnet_type", required=True, cls="input"),
 
             Label("N4:", for_="N4"),
             Select(
@@ -769,18 +761,18 @@ def training():
                 cls="input"),
 
             Label("Learning Rate:"),
-            Input(name="learning_rate", value="2e-6", cls="input"),
+            Input(id="learning_rate", name="learning_rate", value="2e-6", cls="input"),
 
             Label("Training Steps:", for_="steps"),
             Input(id="steps", name="steps", type="number", required=True, cls="input"),
 
             Label("Train Batch Size:", for_="trainBatchSize"),
-            Input(id="trainBatchSize", name="train_batch_size", type="number", required=True, cls="input"),
+            Input(id="train_batch_size", name="train_batch_size", type="number", required=True, cls="input"),
 
             Label("Validation Image (JPG):"),
             Input(name="validation_image", type="file", accept=".jpg,.jpeg", required=True, cls="input"),
             Label("Mixed Precision:"),
-            Select(Option("fp16", value="fp16"), Option("bf16", value="bf16"), name="mixed_precision"),
+            Select(Option("fp16", value="fp16"), Option("bf16", value="bf16"), id="mixed_precision", name="mixed_precision"),
             Div(
                 Label("Prompt:", for_="prompt"),
                 Input(id="prompt", name="prompt", cls="input"),
@@ -799,31 +791,28 @@ def training():
         ),
         Div(id="trainingStatus", cls="status"),
         Script("""
-                document.getElementById("controlnetModel").addEventListener("change", function () {
-                const selected = this.options[this.selectedIndex];
-                document.getElementById("controlnetType").value = selected.dataset.type;
-                document.getElementById("prompt").value = selected.dataset.prompt;
-                document.getElementById("steps").value = selected.dataset.steps;
-                document.getElementById("trainBatchSize").value = selected.dataset.batch;
-            
-                // Auto-set N4 dropdown if the option has data_n4
-                if (selected.dataset.n4) {
+                document.getElementById("existingModel").addEventListener("change", function() {
+                    const selected = this.options[this.selectedIndex];
+                    document.getElementById("controlnetType").value = selected.dataset.type;
                     document.getElementById("N4").value = selected.dataset.n4;
-                }
-            });
+                    document.getElementById("steps").value = selected.dataset.steps;
+                    document.getElementById("trainBatchSize").value = selected.dataset.batch;
+                    document.getElementById("learningRate").value = selected.dataset.lr;
+                    document.getElementById("mixedPrecision").value = selected.dataset.precision;
+                });
             
             document.getElementById("validationImage").addEventListener("change", function () {
-            const wrapper = document.getElementById("promptWrapper");
-            if (this.files.length > 0) {
-                wrapper.style.display = "block";
-                document.getElementById("prompt").setAttribute("required", "true");
-            } else {
-                wrapper.style.display = "none";
-                document.getElementById("prompt").removeAttribute("required");
-            }
-        });
+                const wrapper = document.getElementById("promptWrapper");
+                if (this.files.length > 0) {
+                    wrapper.style.display = "block";
+                    document.getElementById("prompt").setAttribute("required", "true");
+                } else {
+                    wrapper.style.display = "none";
+                    document.getElementById("prompt").removeAttribute("required");
+                }
+            });
 
-            """)
+        """)
     )
     return str(base_layout("ControlNet training", content,
                            navigation=A("Back to Inference Menu", href=url_for('inference')))), 200
