@@ -573,7 +573,9 @@ def inference():
 def preprocess_image():
     try:
         files = request.files.getlist("images")
-        model_type = request.form["model_type"]
+        model_id = request.form["model_type"]  # actually the repo id
+        params = get_model_parameters(model_id)
+        controlnet_type = params.get("controlnet_type", "canny")
         merged_image = None
 
         for file in files:
@@ -581,9 +583,9 @@ def preprocess_image():
             temp_path = f"/tmp/{uuid.uuid4()}.jpg"
             image.save(temp_path)
 
-            if model_type == "canny":
+            if controlnet_type == "canny":
                 result_path = convert_to_canny(temp_path)
-            elif model_type == "hed":
+            elif controlnet_type == "hed":
                 result_path = convert_to_hed(temp_path)
             else:
                 return jsonify({"status": "error", "error": "Invalid model_type"})
@@ -734,12 +736,12 @@ def training():
                 model_id.split("/")[-1],
                 value=model_id,
                 **{
-                    "data_controlnet_type": params.get("controlnet_type", "canny"),
-                    "data_N4": params.get("N4", False),
-                    "data_steps": params.get("steps", 1000),
-                    "data_train_batch_size": params.get("train_batch_size", 2),
-                    "data_learning_rate": params.get("learning_rate", "2e-6"),
-                    "data_mixed_precision": params.get("mixed_precision", "fp16"),
+                    "data-controlnet-type": params.get("controlnet_type", "canny"),
+                    "data-n4": str(params.get("N4", False)).lower(),  # "true"/"false"
+                    "data-steps": params.get("steps", 1000),
+                    "data-train-batch-size": params.get("train_batch_size", 2),
+                    "data-learning-rate": params.get("learning_rate", "2e-6"),
+                    "data-mixed-precision": params.get("mixed_precision", "fp16"),
                 }
             )
         )
@@ -766,16 +768,11 @@ def training():
                 id="newModelWrapper", style="display:none;"
             ),
 
-            Label("ControlNet Type:", for_="controlnetType"),
+            Label("ControlNet Type:", for_="controlnet_type"),
             Input(id="controlnet_type", name="controlnet_type", required=True, cls="input"),
 
             Label("N4:", for_="N4"),
-            Select(
-                Option("No", value=False),
-                Option("Yes", value=True),
-                id="N4",
-                name="N4",
-                cls="input"),
+            Select(Option("No", value="false"), Option("Yes", value="true"), id="N4", name="N4", cls="input"),
 
             Label("Learning Rate:"),
             Input(id="learning_rate", name="learning_rate", value="2e-6", cls="input"),
@@ -783,13 +780,15 @@ def training():
             Label("Training Steps:", for_="steps"),
             Input(id="steps", name="steps", type="number", required=True, cls="input"),
 
-            Label("Train Batch Size:", for_="trainBatchSize"),
+            Label("Train Batch Size:", for_="train_batch_size"),
             Input(id="train_batch_size", name="train_batch_size", type="number", required=True, cls="input"),
 
             Label("Validation Image (JPG):"),
-            Input(name="validation_image", type="file", accept=".jpg,.jpeg", required=True, cls="input"),
+            Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg", cls="input"),
+
             Label("Mixed Precision:"),
-            Select(Option("fp16", value="fp16"), Option("bf16", value="bf16"), id="mixed_precision", name="mixed_precision"),
+            Select(Option("fp16", value="fp16"), Option("bf16", value="bf16"),
+                   id="mixed_precision", name="mixed_precision"),
             Div(
                 Label("Prompt:", for_="prompt"),
                 Input(id="prompt", name="prompt", cls="input"),
@@ -809,25 +808,26 @@ def training():
         Div(id="trainingStatus", cls="status"),
         Script("""
                 document.getElementById("existingModel").addEventListener("change", function() {
-                    const selected = this.options[this.selectedIndex];
-                    document.getElementById("controlnetType").value = selected.dataset.type;
-                    document.getElementById("N4").value = selected.dataset.n4;
-                    document.getElementById("steps").value = selected.dataset.steps;
-                    document.getElementById("trainBatchSize").value = selected.dataset.batch;
-                    document.getElementById("learningRate").value = selected.dataset.lr;
-                    document.getElementById("mixedPrecision").value = selected.dataset.precision;
+                  const selected = this.options[this.selectedIndex];
+                  const ds = selected.dataset;
+                  document.getElementById("controlnet_type").value = ds.controlnetType;
+                  document.getElementById("N4").value = ds.n4;                       // "true"/"false"
+                  document.getElementById("steps").value = ds.steps;
+                  document.getElementById("train_batch_size").value = ds.trainBatchSize;
+                  document.getElementById("learning_rate").value = ds.learningRate;
+                  document.getElementById("mixed_precision").value = ds.mixedPrecision;
                 });
-            
-            document.getElementById("validationImage").addEventListener("change", function () {
-                const wrapper = document.getElementById("promptWrapper");
-                if (this.files.length > 0) {
+                
+                document.getElementById("validationImage").addEventListener("change", function () {
+                  const wrapper = document.getElementById("promptWrapper");
+                  if (this.files.length > 0) {
                     wrapper.style.display = "block";
                     document.getElementById("prompt").setAttribute("required", "true");
-                } else {
+                  } else {
                     wrapper.style.display = "none";
                     document.getElementById("prompt").removeAttribute("required");
-                }
-            });
+                  }
+                });
 
         """)
     )
