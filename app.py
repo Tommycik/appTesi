@@ -22,7 +22,7 @@ from werkzeug.utils import secure_filename
 import re
 from huggingface_hub import HfApi, hf_hub_download
 import yaml
-
+from cloudinary.api import resources
 
 HF_NAMESPACE = "tommycik"
 api = HfApi()
@@ -265,35 +265,32 @@ def get_flashed_html_messages():
     return ""
 
 
-def base_layout(title: str, content: Any, scripts: Any = None, navigation: Any = None):
-    cache_buster = int(time.time())  # Current Unix timestamp
-    if navigation is None:
+def base_layout(title: str, content: Any, extra_scripts: list[str] = None, navigation: Any = None):
+    cache_buster = int(time.time())
+    navigation = Nav(
+        A("Connect to Lambda", href=url_for('connect_lambda'), class_="nav-link"),
+        A("Inference", href=url_for('inference'), class_="nav-link"),
+        A("Training", href=url_for('training'), class_="nav-link"),
+        A("Results", href=url_for('results'), class_="nav-link"),
+        class_="main-nav"
+    )
 
-        navigation = Nav(
-            A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_="nav-link"),
-            A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_="nav-link")
-            , class_="main-nav")
-    else:
-        navigation = Nav(navigation, class_="main-nav")
+    scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
+    if extra_scripts:
+        scripts.extend([Script(src=url_for('static', filename=path, v=cache_buster)) for path in extra_scripts])
 
-    return Div(
-
+    return Html(
         Head(
             Meta(charset="UTF-8"),
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
-            Title(f"Interactive Flask App - {title}"),
+            Title(f"ControlNet App - {title}"),
             Link(rel="stylesheet", href=url_for('static', filename='css/style.css', v=cache_buster))
         ),
         Body(
-
             Header(H1("ControlNet App", class_="site-title"), navigation),
-
             Main(Div(content, class_="container")),
-
-            Footer(P("2025 Lambda ControlNet App. All rights reserved.")),
-
-            Script(src=url_for('static', filename='js/script.js')),
-            scripts or ""  # Page-specific scripts
+            Footer(P("© 2025 Lambda ControlNet App")),
+            *scripts
         )
     )
 
@@ -311,43 +308,39 @@ def convert_to_hed(input_path):
 @app.route('/')
 def index():
     is_connected = session.get('lambda_connected', False)
+
     if not is_connected:
-        action_button_section = Div(
-            P("Please initialize your Lambda Cloud connection and ensure the Docker image is ready."),
-            P(
-                A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), class_="button-link")
+        action_section = Div(
+            P("⚡ Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready."),
+            A("🔗 Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), cls="button primary")
+        )
+    else:
+        action_section = Div(
+            P("✅ Lambda instance is connected and Docker image is ready."),
+            Ul(
+                Li(A("🚀 Go to Inference Page", href=url_for('inference'), cls="link")),
+                Li(A("🧑‍🔬 Go to Training Page", href=url_for('training'), cls="link")),
+                Li(A("📊 Go to Results Page", href=url_for('results'), cls="link")),
             )
         )
 
-    else:
-        action_button_section = Div(
-            P("Lambda initialize and Docker image pulled. You can now proceed to use the models."),
-            P(
-                A("Go to the Image Generation Page", href=url_for('inference'), class_="button-link")
-            ),
-            P(
-                A("Go to the fine tuning Page", href=url_for('training'), class_="button-link")
-            ),
-            P(
-                A("Go to the results Page", href=url_for('results'), class_="button-link")
-            )
-        )
     content = Div(
-        H1("Welcome to the Lambda ControlNet App!"),
-        P("This application allows you to generate images using a Flux ControlNet model running on Lambda Cloud."),
-        P("Before proceeding, ensure you have:"),
+        H1("Lambda ControlNet App", cls="hero-title"),
+        P("Generate and fine-tune images with ControlNet models running on Lambda Cloud.",
+          cls="hero-subtitle"),
+        Hr(),
+        H2("Getting Started"),
         Ul(
-            Li("A Lambda Cloud account and API Key."),
-            Li("An SSH key pair uploaded to Lambda Cloud and the private key accessible locally."),
-            Li(
-                f"A running Lambda Cloud instance with Docker installed and SSH accessible at {LAMBDA_INSTANCE_IP}."),
-            #Li(f"Your Docker image {DOCKER_IMAGE_NAME} pushed to Docker Hub.")
+            Li("Create a Lambda Cloud account & API Key."),
+            Li("Upload an SSH key pair to Lambda Cloud."),
+            Li(f"Start a Lambda instance with Docker installed (IP: {LAMBDA_INSTANCE_IP}).")
         ),
-        action_button_section,
+        Hr(),
+        action_section,
         get_flashed_html_messages()
     )
-    html_obj = base_layout("Connect to lambda cloud", content)
-    return str(html_obj), 200, {'Content-Type': 'text/html'}
+
+    return str(base_layout("Home", content)), 200
 
 
 @app.route('/connect_lambda')
@@ -441,27 +434,9 @@ def inference():
             P(f"Prompt: {prompt}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for result...", id="result-section"),
-            Script(f"""
-            async function pollResult() {{
-                const res = await fetch("{url_for('get_result', job_id=job_id)}");
-                const data = await res.json();
-                if (data.status === "done") {{
-                    let resultDiv = document.getElementById("result-section");
-                    if (data.output.startsWith("http")) {{
-                        resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
-                    }} else {{
-                        resultDiv.innerHTML = "<p>" + data.output + "</p>";
-                    }}
-                }} else {{
-                    setTimeout(pollResult, 2000);
-                }}
-            }}
-            pollResult();
-            """)
         )
-
-        return str(
-            base_layout("Waiting for Inference", content, navigation=A("Back to Home", href=url_for('index')))), 200
+        return str(base_layout("Waiting for Inference", content,
+                               extra_scripts=["js/polling.js"])), 200
     models = list_repo_models()
 
     options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
@@ -469,104 +444,21 @@ def inference():
     # GET method: render form
     form = Form(
         Select(*options, id="model", name="model"),
-        Label("Prompt:"),
-        Input(type="text", name="prompt", required=True),
-        Div(
-            Label("Upload Images:"),
-            Input(type="file", id="uploadInput", accept="image/*", multiple=True),
-
-            Br(), Br(),
-
-            Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid black;"),
-
-            Br(),
-
-            Button("Clear Canvas", type="button", onclick="clearCanvas()"),
-
-            Br(), Br(),
-
-            Input(type="hidden", name="control_image_data", id="controlImageData"),
-
-            Script("""
-                const canvas = document.getElementById("drawCanvas");
-                const ctx = canvas.getContext("2d");
-                
-                ctx.fillStyle = "black";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                let drawing = false;
-            
-                canvas.addEventListener("mousedown", () => drawing = true);
-                canvas.addEventListener("mouseup", () => {
-                    drawing = false;
-                    ctx.beginPath();
-                });
-                canvas.addEventListener("mousemove", draw);
-            
-                function draw(e) {
-                    if (!drawing) return;
-                    ctx.lineWidth = 3;
-                    ctx.lineCap = "round";
-                    ctx.strokeStyle = "white";
-                    ctx.lineTo(e.offsetX, e.offsetY);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(e.offsetX, e.offsetY);
-                }
-            
-                function clearCanvas() {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.fillStyle = "black";
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    window.convertedImage = null; // Clear the converted image reference
-                }
-            
-                document.getElementById("uploadInput").addEventListener("change", async function (e) {
-                    const files = e.target.files;
-                    if (!files.length) return;
-                
-                    const modelType = document.getElementById("model").value;
-                    const formData = new FormData();
-                    for (let file of files) {
-                        formData.append("images", file);
-                    }
-                    formData.append("model_type", modelType);
-                
-                    const response = await fetch("/preprocess_image", { method: "POST", body: formData });
-                    const data = await response.json();
-                
-                    if (data.status === "ok") {
-                        const img = new Image();
-                        img.onload = function () {
-                            ctx.clearRect(0, 0, canvas.width, canvas.height);
-                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                            window.convertedImage = img;
-                        };
-                        img.src = data.converted_data_url;
-                    } else {
-                        alert("Error: " + data.error);
-                    }
-                });
-            
-                document.querySelector("form").addEventListener("submit", function (e) {
-                    const dataURL = canvas.toDataURL("image/png");
-                    document.getElementById("controlImageData").value = dataURL;
-                });
-                """
-            )
-        ),
-
         Label("Conditioning Scale (0.2):"),
         Input(type="number", name="scale", step="0.1", value="0.2"),
         Label("Steps (50):"),
         Input(type="number", name="steps", value="50"),
         Label("Guidance Scale (6.0):"),
         Input(type="number", name="guidance", step="0.5", value="6.0"),
-        Button("Submit", type="submit")
-        , method="post", enctype="multipart/form-data")
+        Label("Prompt:"), Input(type="text", name="prompt", required=True, cls="input"),
+        Label("Upload Images:"), Input(type="file", id="uploadInput", accept="image/*", multiple=True),
+        Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid #ccc;"),
+        Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button"),
+        Input(type="hidden", name="control_image_data", id="controlImageData"),
+        Button("Submit", type="submit", cls="button"),
+        method="post", enctype="multipart/form-data")
 
-    return str(base_layout("ControlNet Inference", form,
-                           navigation=A("Back to Inference Menu", href=url_for('inference')))), 200
+    return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])),200
 
 @app.route("/preprocess_image", methods=["POST"])
 def preprocess_image():
@@ -713,37 +605,14 @@ def training():
             repo_type="model"
         )
         content = Div(
-            H2("trainig Job Submitted"),
+            H2("Training Job Submitted"),
             P(f"Model: {hub_model_id}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for training...", id="result-section"),
-            Script(f"""
-                    async function pollResult() {{
-                          const res = await fetch("{{ url_for('get_result', job_id=job_id) }}");
-                          const data = await res.json();
-                          let resultDiv = document.getElementById("result-section");
-                        
-                          if (data.status === "done") {{
-                            if (typeof data.output === "string" && data.output.startsWith("http")) {{
-                              resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
-                            }} else {{
-                              resultDiv.innerHTML = "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
-                            }}
-                          }} else if (data.status === "running") {{
-                            resultDiv.innerHTML = `Training... ${{data.progress || 0}}%`;
-                            setTimeout(pollResult, 2000);
-                          }} else if (data.status === "error") {{
-                            resultDiv.innerHTML = `<span style="color:red">Error: ${{data.message || 'unknown'}}</span>`;
-                          }} else {{
-                            setTimeout(pollResult, 2000);
-                          }}
-                        }}
-                        pollResult();
-            """)
         )
+        return str(base_layout("Waiting for Training", content,
+                               extra_scripts=["js/polling.js"])), 200
 
-        return str(
-            base_layout("Waiting for Training", content, navigation=A("Back to Home", href=url_for('index')))), 200
     models = list_repo_models()
     options = []
     for m in models:
@@ -763,112 +632,131 @@ def training():
                 }
             )
         )
-    content = Div(
-        Div("ControlNet Training", cls="title"),
-        Form(
-            Label("Mode:"),
-            Select(
-                Option("Fine-tune existing model", value="existing"),
-                Option("Create new model", value="new"),
-                id="mode", name="mode"
-            ),
-
-            Div(
-                Label("Existing Model:"),
-                Select(*options,
-                       id="existingModel", name="existing_model"),
-                id="existingModelWrapper"
-            ),
-
-            Div(
-                Label("New Model Name (Hub ID suffix):"),
-                Input(name="new_model_name", id="newModelName", cls="input"),
-                id="newModelWrapper", style="display:none;"
-            ),
-
-            Label("ControlNet Type:", for_="controlnet_type"),
-            Input(id="controlnet_type", name="controlnet_type", required=True, cls="input"),
-
-            Label("N4:", for_="N4"),
-            Select(Option("No", value="false"), Option("Yes", value="true"), id="N4", name="N4", cls="input"),
-
-            Label("Learning Rate:"),
-            Input(id="learning_rate", name="learning_rate", value="2e-6", cls="input"),
-
-            Label("Training Steps:", for_="steps"),
-            Input(id="steps", name="steps", type="number", required=True, cls="input"),
-
-            Label("Train Batch Size:", for_="train_batch_size"),
-            Input(id="train_batch_size", name="train_batch_size", type="number", required=True, cls="input"),
-
-            Label("Validation Image (JPG):"),
-            Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg", cls="input"),
-
-            Label("Mixed Precision:"),
-            Select(Option("fp16", value="fp16"), Option("bf16", value="bf16"),
-                   id="mixed_precision", name="mixed_precision"),
-            Div(
-                Label("Prompt:", for_="prompt"),
-                Input(id="prompt", name="prompt", cls="input"),
-                id="promptWrapper",
-                style="display:none;"
-            ),
-            Label("Hub Model ID:"),
-            Input(name="hub_model_id", required=True, cls="input"),
-
-            Button("Start Training", type="submit", cls="button"),
-
-            method="post",
-            enctype="multipart/form-data",
-            id="trainingForm",
-            cls="form"
+    form = Form(
+        Label("Mode:"),
+        Select(
+            Option("Fine-tune existing model", value="existing"),
+            Option("Create new model", value="new"),
+            id="mode", name="mode"
         ),
-        Div(id="trainingStatus", cls="status"),
-        Script("""
-                document.getElementById("existingModel").addEventListener("change", function() {
-                  const selected = this.options[this.selectedIndex];
-                  const ds = selected.dataset;
-                  document.getElementById("controlnet_type").value = ds.controlnetType;
-                  document.getElementById("N4").value = ds.n4;                       // "true"/"false"
-                  document.getElementById("steps").value = ds.steps;
-                  document.getElementById("train_batch_size").value = ds.trainBatchSize;
-                  document.getElementById("learning_rate").value = ds.learningRate;
-                  document.getElementById("mixed_precision").value = ds.mixedPrecision;
-                });
-                
-                document.getElementById("validationImage").addEventListener("change", function () {
-                  const wrapper = document.getElementById("promptWrapper");
-                  if (this.files.length > 0) {
-                    wrapper.style.display = "block";
-                    document.getElementById("prompt").setAttribute("required", "true");
-                  } else {
-                    wrapper.style.display = "none";
-                    document.getElementById("prompt").removeAttribute("required");
-                  }
-                });
 
-        """)
-    )
-    return str(base_layout("ControlNet training", content,
-                           navigation=A("Back to Inference Menu", href=url_for('inference')))), 200
-@app.route('/results')
+        Div(
+            Label("Existing Model:"),
+            Select(*options,
+                   id="existingModel", name="existing_model"),
+            id="existingModelWrapper"
+        ),
+
+        Div(
+            Label("New Model Name (Hub ID suffix):"),
+            Input(name="new_model_name", id="newModelName", cls="input"),
+            id="newModelWrapper", style="display:none;"
+        ),
+
+        Label("ControlNet Type:", for_="controlnet_type"),
+        Input(id="controlnet_type", name="controlnet_type", required=True, cls="input"),
+
+        Label("N4:", for_="N4"),
+        Select(Option("No", value="false"), Option("Yes", value="true"), id="N4", name="N4", cls="input"),
+
+        Label("Learning Rate:"),
+        Input(id="learning_rate", name="learning_rate", value="2e-6", cls="input"),
+
+        Label("Training Steps:", for_="steps"),
+        Input(id="steps", name="steps", type="number", required=True, cls="input"),
+
+        Label("Train Batch Size:", for_="train_batch_size"),
+        Input(id="train_batch_size", name="train_batch_size", type="number", required=True, cls="input"),
+
+        Label("Validation Image (JPG):"),
+        Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg", cls="input"),
+
+        Label("Mixed Precision:"),
+        Select(Option("fp16", value="fp16"), Option("bf16", value="bf16"),
+               id="mixed_precision", name="mixed_precision"),
+        Div(
+            Label("Prompt:", for_="prompt"),
+            Input(id="prompt", name="prompt", cls="input"),
+            id="promptWrapper",
+            style="display:none;"
+        ),
+        Label("Hub Model ID:"),
+        Input(name="hub_model_id", required=True, cls="input"),
+
+        Button("Start Training", type="submit", cls="button"),
+
+        method="post", enctype="multipart/form-data", id="trainingForm", cls="form"
+    ),
+    return str(base_layout("Training", form, extra_scripts=["js/training.js"])), 200
+
+@app.route('/results', methods=["GET"])
 def results():
-    return
+    models = list_repo_models()
+    selected_model = request.args.get("model", "all")
+    page = int(request.args.get("page", 1))
+    per_page = 20
 
+    image_urls = []
+    has_more = False
 
-@app.route('/results/controlnet')
-def results_controlnet():
-    return
+    try:
+        if selected_model == "all":
+            # Collect results across all models (paginate separately not supported)
+            for m in models:
+                model_name = m["id"].split("/")[-1]
+                res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page)
+                image_urls.extend([item["secure_url"] for item in res["resources"]])
+            # For "all", pagination isn’t well-defined (skip has_more)
+        else:
+            model_name = selected_model.split("/")[-1]
+            res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page, context=True)
+            image_urls = [item["secure_url"] for item in res["resources"]]
+            has_more = "next_cursor" in res
 
+            next_cursor = res.get("next_cursor")
+    except Exception as e:
+        flash(f"Error fetching results: {e}", "error")
 
-@app.route('/results/controlnetReduced')
-def results_controlnet_reduced():
-    return
+    # Model selector
+    options = [Option("All Models", value="all", selected=(selected_model == "all"))]
+    for m in models:
+        options.append(
+            Option(
+                m["id"].split("/")[-1],
+                value=m["id"],
+                selected=(selected_model == m["id"])
+            )
+        )
 
+    model_selector = Form(
+        Label("Select Model:", for_="model"),
+        Select(*options, name="model", id="model"),
+        Button("Show Results", type="submit", cls="button"),
+        method="get", cls="form"
+    )
 
-@app.route('/results/controlnetHed')
-def results_controlnet_hed():
-    return
+    # Image gallery
+    cards = [Div(Img(src=url, cls="card-img"), cls="card") for url in image_urls]
+
+    # Pagination controls
+    pagination = Div(cls="pagination")
+    if page > 1:
+        pagination.append(
+            A("⬅ Previous", href=url_for("results", model=selected_model, page=page - 1), cls="button secondary")
+        )
+    if has_more:
+        pagination.append(
+            A("Next ➡", href=url_for("results", model=selected_model, page=page + 1), cls="button secondary")
+        )
+
+    content = Div(
+        H1("📊 Model Results", cls="hero-title"),
+        model_selector,
+        Div(*cards, cls="card-grid"),
+        pagination
+    )
+
+    return str(base_layout("Results", content)), 200
 
 
 # main driver function
