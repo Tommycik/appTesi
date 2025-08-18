@@ -279,7 +279,7 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None, navig
     if extra_scripts:
         scripts.extend([Script(src=url_for('static', filename=path, v=cache_buster)) for path in extra_scripts])
 
-    return Html(
+    return Div(
         Head(
             Meta(charset="UTF-8"),
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
@@ -311,16 +311,16 @@ def index():
 
     if not is_connected:
         action_section = Div(
-            P("⚡ Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready."),
-            A("🔗 Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), cls="button primary")
+            P("Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready."),
+            A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), cls="button primary")
         )
     else:
         action_section = Div(
-            P("✅ Lambda instance is connected and Docker image is ready."),
+            P("Lambda instance is connected and Docker image is ready."),
             Ul(
-                Li(A("🚀 Go to Inference Page", href=url_for('inference'), cls="link")),
-                Li(A("🧑‍🔬 Go to Training Page", href=url_for('training'), cls="link")),
-                Li(A("📊 Go to Results Page", href=url_for('results'), cls="link")),
+                Li(A("Go to Inference Page", href=url_for('inference'), cls="link")),
+                Li(A("Go to Training Page", href=url_for('training'), cls="link")),
+                Li(A("Go to Results Page", href=url_for('results'), cls="link")),
             )
         )
 
