@@ -288,7 +288,7 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None, navig
         ),
         Body(
             Header(H1("ControlNet App", class_="site-title"), navigation),
-            Main(Div(content, class_="container")),
+            Main(Div(content,id="main_div", class_="container")),
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts
         )
@@ -312,7 +312,7 @@ def index():
     if not is_connected:
         action_section = Div(
             P("Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready."),
-            A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), cls="button primary")
+            A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), cls="button primary"),
         )
     else:
         action_section = Div(
@@ -321,7 +321,7 @@ def index():
                 Li(A("Go to Inference Page", href=url_for('inference'), cls="link")),
                 Li(A("Go to Training Page", href=url_for('training'), cls="link")),
                 Li(A("Go to Results Page", href=url_for('results'), cls="link")),
-            )
+            ),
         )
 
     content = Div(
@@ -338,7 +338,7 @@ def index():
         Hr(),
         action_section,
         get_flashed_html_messages()
-    )
+    ,id="content", class_="container")
 
     return str(base_layout("Home", content)), 200
 
@@ -434,7 +434,7 @@ def inference():
             P(f"Prompt: {prompt}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for result...", id="result-section"),
-        )
+        id="content")
         return str(base_layout("Waiting for Inference", content,
                                extra_scripts=["js/polling.js"])), 200
     models = list_repo_models()
@@ -456,7 +456,7 @@ def inference():
         Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button"),
         Input(type="hidden", name="control_image_data", id="controlImageData"),
         Button("Submit", type="submit", cls="button"),
-        method="post", enctype="multipart/form-data")
+        method="post", id="content",enctype="multipart/form-data")
 
     return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])),200
 
@@ -609,7 +609,7 @@ def training():
             P(f"Model: {hub_model_id}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for training...", id="result-section"),
-        )
+        id="content")
         return str(base_layout("Waiting for Training", content,
                                extra_scripts=["js/polling.js"])), 200
 
