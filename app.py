@@ -387,9 +387,9 @@ def inference():
         control_image_path = None
         remote_control_path = None
 
-        data_url = request.form.get('control_image_data')
-        if data_url and "," in data_url:
-            header, encoded = data_url.split(",", 1)
+        image_url = request.form.get('control_image_data')
+        if image_url and "," in image_url:
+            header, encoded = image_url.split(",", 1)
             binary_data = base64.b64decode(encoded)
             image = Image.open(BytesIO(binary_data)).convert("RGB")
 
