@@ -426,10 +426,8 @@ def inference():
         return str(base_layout("Waiting for Inference", content,
                                extra_scripts=["js/polling.js"])), 200
     models = models_list()
-
     options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
 
-    # GET method: render form
     form = Form(
         Select(*options, id="model", name="model"),
         Label("Conditioning Scale (0.2):"),
@@ -453,7 +451,8 @@ def inference():
 def preprocess_image():
     try:
         files = request.files.getlist("images")
-        model_id = request.form["model_type"]  # actually the repo id
+        model_id = request.form["model"]  #todo testare, potrebbe dare errore causa usa nome repo e non id
+        print(model_id)
         params = model_info(model_id)
         controlnet_type = params.get("controlnet_type", "canny")
         merged_image = None
