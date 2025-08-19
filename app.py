@@ -1,54 +1,90 @@
+import queue
 import shlex
 import tempfile
+import threading
+import time
 import uuid
 from io import BytesIO
-import os
-import sys
-import base64
-import cloudinary
-from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, make_response, jsonify
-import requests
-from dotenv import load_dotenv
-import paramiko
-from fasthtml.common import *
 from typing import Any
-import time  #for cache busting
-import threading
-import queue
-from PIL import Image
+from scp import SCPClient
+
+import os
+import cloudinary
 import cv2
 import numpy as np
-from werkzeug.utils import secure_filename
-import re
-from huggingface_hub import HfApi, hf_hub_download
+import paramiko
+import requests
 import yaml
+from PIL import Image
 from cloudinary.api import resources
+from dotenv import load_dotenv
+from fasthtml.common import *
+from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, jsonify
+from huggingface_hub import HfApi, hf_hub_download
+from werkzeug.utils import secure_filename
 
+app = Flask(__name__)
+app.secret_key = os.urandom(12)
+LAMBDA_CLOUD_API_BASE = "https://cloud.lambdalabs.com/api/v1/instances"
+LAMBDA_CLOUD_API_KEY = os.getenv('LAMBDA_CLOUD_API_KEY')
+LAMBDA_INSTANCE_IP = os.getenv('LAMBDA_INSTANCE_IP', "YOUR_LAMBDA_INSTANCE_PUBLIC_IP")
+LAMBDA_INSTANCE_USER = os.getenv('LAMBDA_INSTANCE_USER', "ubuntu")
+SSH_PRIVATE_KEY_PATH = os.getenv('SSH_PRIVATE_KEY_PATH')
+HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
+DOCKER_IMAGE_NAME = os.getenv('DOCKER_IMAGE_NAME',
+                              "your-dockerhub-username/controlnet-generator:latest")  # when docker is ready
+REGION = "us-west-3"
+CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
+CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY')
+CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
+
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET
+)
 HF_NAMESPACE = "tommycik"
 api = HfApi()
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+sys.stdout.reconfigure(encoding='utf-8')
 
-def list_repo_models(namespace=HF_NAMESPACE):
-    """
-    List all models in the HuggingFace namespace.
-    Returns list of dicts: {id, card_data}
-    """
+load_dotenv()
+# serializing request to lambda
+work_queue = queue.Queue()
+# Dictionary to store results, keyed by a unique job ID
+results_db = {}
+# A lock to serialize the SSH command
+worker_lock = threading.Lock()
+
+def convert_to_canny(input_path):
+    img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
+    edges = cv2.Canny(img, 100, 200)
+    out_path = input_path.replace(".jpg", "_canny.jpg")
+    cv2.imwrite(out_path, edges)
+    return out_path
+
+
+def convert_to_hed(input_path):
+    from hed_infer import hed_from_path
+    return hed_from_path(input_path)
+
+
+def models_list(namespace=HF_NAMESPACE):
     models = api.list_models(author=namespace)
     result = []
-    for m in models:
+    for model in models:
         try:
-            info = api.model_info(m.modelId)
+            info = api.model_info(model.modelId)
             result.append({
-                "id": m.modelId,
+                "id": model.modelId,
                 "card_data": info.card_data or {}
             })
         except Exception as e:
-            print(f"Skipping {m.modelId}: {e}")
+            print(f"Skipping {model.modelId}: {e}")
     return result
 
-def get_model_parameters(model_id):
-    """
-    Load training_config.yaml from HF repo if available.
-    """
+
+def model_info(model_id):
     try:
         yaml_path = hf_hub_download(repo_id=model_id,
                                     filename="training_config.yaml",
@@ -60,12 +96,7 @@ def get_model_parameters(model_id):
         print(f"No config for {model_id}: {e}")
         return {}
 
-
 def scp_to_lambda(local_path, remote_path):
-    import paramiko
-    from scp import SCPClient
-    import os
-
     key = paramiko.RSAKey.from_private_key_file(SSH_PRIVATE_KEY_PATH)
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -82,49 +113,7 @@ def scp_to_lambda(local_path, remote_path):
     with SCPClient(ssh.get_transport()) as scp:
         scp.put(local_path, remote_path)
 
-os.environ['PYTHONIOENCODING'] = 'utf-8'
-sys.stdout.reconfigure(encoding='utf-8')
-sys.stderr.reconfigure(encoding='utf-8')
 
-# Load environment variables from .env file
-load_dotenv()
-
-#serializing request to lambda
-work_queue = queue.Queue()
-# Dictionary to store results, keyed by a unique job ID
-results_db = {}
-# A lock to serialize the SSH command
-worker_lock = threading.Lock()
-
-app = Flask(__name__)
-app.secret_key = os.urandom(12)
-
-LAMBDA_INSTANCE_ID = os.getenv('LAMBDA_INSTANCE_ID')
-LAMBDA_CLOUD_API_BASE = "https://cloud.lambdalabs.com/api/v1/instances"
-LAMBDA_CLOUD_API_KEY = os.getenv('LAMBDA_CLOUD_API_KEY')
-LAMBDA_INSTANCE_IP = os.getenv('LAMBDA_INSTANCE_IP', "YOUR_LAMBDA_INSTANCE_PUBLIC_IP")
-LAMBDA_INSTANCE_USER = os.getenv('LAMBDA_INSTANCE_USER', "ubuntu")
-SSH_PRIVATE_KEY_PATH = os.getenv('SSH_PRIVATE_KEY_PATH')
-HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
-DOCKER_IMAGE_NAME = os.getenv('DOCKER_IMAGE_NAME',
-                              "your-dockerhub-username/controlnet-generator:latest")  #when docker is ready
-REGION = "us-west-3"
-
-CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
-CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY')
-CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
-
-cloudinary.config(
-    cloud_name=CLOUDINARY_CLOUD_NAME,
-    api_key=CLOUDINARY_API_KEY,
-    api_secret=CLOUDINARY_API_SECRET
-)
-
-model_map = {
-    "hed": "tommycik/controlFluxAlcolHed",
-    "reduced": "tommycik/controlFluxAlcolReduced",
-    "standard": "tommycik/controlFluxAlcol",
-}
 class SSHManager:
     def __init__(self, ip, username, key_path):
         self.ip = ip
@@ -222,8 +211,9 @@ def worker():
 
 worker_thread = threading.Thread(target=worker, daemon=True)
 worker_thread.start()
+
 # SSH Utilities
-def get_lambda_instance_info(instance_id):
+def get_lambda_info():
     headers = {
         "Authorization": f"Bearer {LAMBDA_CLOUD_API_KEY}"
     }
@@ -238,7 +228,7 @@ def get_lambda_instance_info(instance_id):
             print(instances)
 
             for instance in instances:
-                if instance.get("id") == instance_id:
+                if instance.get("ip") == LAMBDA_INSTANCE_IP:
                     print("DEBUG: Matched instance:", instance)
                     return instance
 
@@ -253,8 +243,10 @@ def get_lambda_instance_info(instance_id):
 
 
 ssh_manager = SSHManager(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH)
+
+
 # Helper function for messages
-def get_flashed_html_messages():
+def flash_html_messages():
     messages_html = []
     for category, message in get_flashed_messages(with_categories=True):
         messages_html.append(
@@ -265,15 +257,21 @@ def get_flashed_html_messages():
     return ""
 
 
-def base_layout(title: str, content: Any, extra_scripts: list[str] = None, navigation: Any = None):
+def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
     cache_buster = int(time.time())
-    navigation = Nav(
-        A("Connect to Lambda", href=url_for('connect_lambda'), class_="nav-link"),
-        A("Inference", href=url_for('inference'), class_="nav-link"),
-        A("Training", href=url_for('training'), class_="nav-link"),
-        A("Results", href=url_for('results'), class_="nav-link"),
-        class_="main-nav"
-    )
+    is_connected = session.get('lambda_connected', False)
+    if is_connected:
+
+        navigation = Nav(
+            A("Inference", href=url_for('inference'), class_="nav-link"),
+            A("Training", href=url_for('training'), class_="nav-link"),
+            A("Results", href=url_for('results'), class_="nav-link"),
+            class_="main-nav"
+        )
+    else:
+        navigation = Nav(
+            A("Connect to Lambda", href=url_for('connect_lambda'), class_="nav-link"),
+        )
 
     scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
     if extra_scripts:
@@ -288,22 +286,11 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None, navig
         ),
         Body(
             Header(H1("ControlNet App", class_="site-title"), navigation),
-            Main(Div(content,id="main_div", class_="container")),
+            Main(Div(content, id="main_div", class_="container")),
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts
         )
     )
-
-def convert_to_canny(input_path):
-    img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
-    edges = cv2.Canny(img, 100, 200)
-    out_path = input_path.replace(".jpg", "_canny.jpg")
-    cv2.imwrite(out_path, edges)
-    return out_path
-
-def convert_to_hed(input_path):
-    from hed_infer import hed_from_path
-    return hed_from_path(input_path)
 
 @app.route('/')
 def index():
@@ -316,12 +303,12 @@ def index():
         )
     else:
         action_section = Div(
-            P("Lambda instance is connected and Docker image is ready."),
-            Ul(
-                Li(A("Go to Inference Page", href=url_for('inference'), cls="link")),
-                Li(A("Go to Training Page", href=url_for('training'), cls="link")),
-                Li(A("Go to Results Page", href=url_for('results'), cls="link")),
-            ),
+            H2("Lambda instance is connected and Docker image is ready."),
+            Div(
+                A("Go to Inference Page", href=url_for('inference'), cls="link"),
+                A("Go to Training Page", href=url_for('training'), cls="link"),
+                A("Go to Results Page", href=url_for('results'), cls="link"),
+            class_="points"),
         )
 
     content = Div(
@@ -330,42 +317,41 @@ def index():
           cls="hero-subtitle"),
         Hr(),
         H2("Getting Started"),
-        Ul(
-            Li("Create a Lambda Cloud account & API Key."),
-            Li("Upload an SSH key pair to Lambda Cloud."),
-            Li(f"Start a Lambda instance with Docker installed (IP: {LAMBDA_INSTANCE_IP}).")
+        Div(
+            P("Create a Lambda Cloud account & API Key."),
+            P("Upload an SSH key pair to Lambda Cloud."),
+            P(f"Start a Lambda instance with Docker installed (IP: {LAMBDA_INSTANCE_IP})."),
+            class_="points"
         ),
         Hr(),
         action_section,
-        get_flashed_html_messages()
-    ,id="content", class_="container")
+        flash_html_messages()
+        , id="content", class_="container")
 
     return str(base_layout("Home", content)), 200
 
 
 @app.route('/connect_lambda')
 def connect_lambda():
-    if not LAMBDA_INSTANCE_ID or not LAMBDA_CLOUD_API_KEY:
-        flash('Lambda instance ID or API key is not configured!', 'error')
+    if not LAMBDA_CLOUD_API_KEY:
+        flash('Lambda API key is not configured!', 'error')
         return redirect(url_for('index'))
 
-    instance_data = get_lambda_instance_info(LAMBDA_INSTANCE_ID)
+    instance_data = get_lambda_info()
 
     if not instance_data:
-        flash("Lambda instance ID not found or failed to retrieve data.", "error")
+        flash("Lambda instance IP not found or failed to retrieve data.", "error")
         return redirect(url_for('index'))
 
     status = instance_data.get("status")
-    public_ip = instance_data.get("ip")
 
-    if status != "active" or not public_ip:
-        flash(f"Lambda instance is not active or missing IP (status: {status})", "error")
+#todo caricare docker
+    if status != "active":
+        flash(f"Lambda instance is not active (status: {status})", "error")
         return redirect(url_for('index'))
 
-    global LAMBDA_INSTANCE_IP
-    LAMBDA_INSTANCE_IP = public_ip
     command = "source venv_flux/bin/activate && cd tesiControlNetFlux/Src"
-    stdout, stderr = ssh_manager.run_command(command)  #command for docker
+    stdout, stderr = ssh_manager.run_command(command)  # command for docker
 
     if stderr and "no space left on device" in stderr.lower():
         flash(f'Error during SSH: No space left on device. {stderr}', 'error')
@@ -377,12 +363,14 @@ def connect_lambda():
 
     return redirect(url_for('index'))
 
+
 @app.route('/job_result/<job_id>', methods=["GET"])
 def get_result(job_id):
     result = results_db.get(job_id)
     if result is None:
         return jsonify({"status": "pending"})
     return jsonify(result)
+
 
 @app.route('/inference', methods=["GET", "POST"])
 def inference():
@@ -392,10 +380,10 @@ def inference():
         steps = request.form.get('steps', 50)
         guidance = request.form.get('guidance', 6.0)
         model_id = request.form["model"]
-        params = get_model_parameters(model_id)
+        params = model_info(model_id)
         model_type = params.get("controlnet_type", "canny")
         n4 = params.get("N4", False)
-        precision = params.get("mixed_precision", "fp16")#todo aggiungere questo controllo
+        precision = params.get("mixed_precision", "fp16")  # todo aggiungere questo controllo
         control_image_path = None
         remote_control_path = None
 
@@ -434,10 +422,10 @@ def inference():
             P(f"Prompt: {prompt}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for result...", id="result-section"),
-        id="content")
+            id="content")
         return str(base_layout("Waiting for Inference", content,
                                extra_scripts=["js/polling.js"])), 200
-    models = list_repo_models()
+    models = models_list()
 
     options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
 
@@ -456,16 +444,17 @@ def inference():
         Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button"),
         Input(type="hidden", name="control_image_data", id="controlImageData"),
         Button("Submit", type="submit", cls="button"),
-        method="post", id="content",enctype="multipart/form-data")
+        method="post", id="content", enctype="multipart/form-data")
 
-    return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])),200
+    return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])), 200
+
 
 @app.route("/preprocess_image", methods=["POST"])
 def preprocess_image():
     try:
         files = request.files.getlist("images")
         model_id = request.form["model_type"]  # actually the repo id
-        params = get_model_parameters(model_id)
+        params = model_info(model_id)
         controlnet_type = params.get("controlnet_type", "canny")
         merged_image = None
 
@@ -499,8 +488,10 @@ def preprocess_image():
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)})
 
+
 @app.route('/training', methods=["GET", "POST"])
 def training():
+    #todo sistemare differenza tra controlnet model e hub id
     if request.method == "POST":
         mode = request.form["mode"]
 
@@ -513,18 +504,18 @@ def training():
             hub_model_id = f"{HF_NAMESPACE}/{new_name}"
 
             # check existence
-            existing = [m["id"] for m in list_repo_models()]
+            existing = [m["id"] for m in models_list()]
             if hub_model_id in existing:
                 flash("Model with this name already exists on HuggingFace!", "error")
                 return redirect(url_for("training"))
 
-        controlnet_model = model_map[request.form["controlnet_model"]]
+        controlnet_model = request.form["controlnet_model"]
         controlnet_type = request.form["controlnet_type"]
         learning_rate = request.form.get("learning_rate", "2e-6")
         steps = request.form["steps"]
         train_batch_size = request.form["train_batch_size"]
         n4 = request.form["N4"]
-        gradient_accumulation_steps=None
+        gradient_accumulation_steps = None
         if "gradient_accumulation_steps" in request.form:
             gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
         resolution = None
@@ -609,15 +600,15 @@ def training():
             P(f"Model: {hub_model_id}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for training...", id="result-section"),
-        id="content")
+            id="content")
         return str(base_layout("Waiting for Training", content,
                                extra_scripts=["js/polling.js"])), 200
 
-    models = list_repo_models()
+    models = models_list()
     options = []
     for m in models:
         model_id = m["id"]
-        params = get_model_parameters(model_id)
+        params = model_info(model_id)
         options.append(
             Option(
                 model_id.split("/")[-1],
@@ -689,9 +680,10 @@ def training():
     ),
     return str(base_layout("Training", form, extra_scripts=["js/training.js"])), 200
 
+
 @app.route('/results', methods=["GET"])
 def results():
-    models = list_repo_models()
+    models = models_list()
     selected_model = request.args.get("model", "all")
     page = int(request.args.get("page", 1))
     per_page = 20
@@ -709,7 +701,8 @@ def results():
             # For "all", pagination isn’t well-defined (skip has_more)
         else:
             model_name = selected_model.split("/")[-1]
-            res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page, context=True)
+            res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page,
+                            context=True)
             image_urls = [item["secure_url"] for item in res["resources"]]
             has_more = "next_cursor" in res
 
@@ -770,4 +763,3 @@ if __name__ == '__main__':
     if not SSH_PRIVATE_KEY_PATH:
         print("WARNING: SSH_PRIVATE_KEY_PATH is not set in .env.")
     app.run(debug=False, host='0.0.0.0', port=5000)
-

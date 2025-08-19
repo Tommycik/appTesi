@@ -164,6 +164,9 @@ select {
   font-size: 1rem;
 }
 
+.points{
+
+}
 /*Pagination*/
 .pagination {
   display: flex;
