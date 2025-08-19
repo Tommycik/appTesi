@@ -682,6 +682,7 @@ def training():
 
 @app.route('/results', methods=["GET"])
 def results():
+    #todo finire
     models = models_list()
     selected_model = request.args.get("model", "all")
     page = int(request.args.get("page", 1))
@@ -697,7 +698,6 @@ def results():
                 model_name = m["id"].split("/")[-1]
                 res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page)
                 image_urls.extend([item["secure_url"] for item in res["resources"]])
-            # For "all", pagination isn’t well-defined (skip has_more)
         else:
             model_name = selected_model.split("/")[-1]
             res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page,
@@ -742,7 +742,7 @@ def results():
         )
 
     content = Div(
-        H1("📊 Model Results", cls="hero-title"),
+        H1("Model Results", cls="hero-title"),
         model_selector,
         Div(*cards, cls="card-grid"),
         pagination
