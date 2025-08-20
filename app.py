@@ -709,7 +709,6 @@ def results():
 
     try:
         if selected_model == "all":
-            # Collect results across all models (paginate separately not supported)
             for m in models:
                 model_name = m["id"].split("/")[-1]
                 res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page)
