@@ -56,6 +56,7 @@ results_db = {}
 # A lock to serialize the SSH command
 worker_lock = threading.Lock()
 
+
 def convert_to_canny(input_path):
     img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
     edges = cv2.Canny(img, 100, 200)
@@ -95,6 +96,7 @@ def model_info(model_id):
     except Exception as e:
         print(f"No config for {model_id}: {e}")
         return {}
+
 
 def scp_to_lambda(local_path, remote_path):
     key = paramiko.RSAKey.from_private_key_file(SSH_PRIVATE_KEY_PATH)
@@ -209,8 +211,10 @@ def worker():
         finally:
             work_queue.task_done()
 
+
 worker_thread = threading.Thread(target=worker, daemon=True)
 worker_thread.start()
+
 
 # SSH Utilities
 def get_lambda_info():
@@ -292,6 +296,7 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
         )
     )
 
+
 @app.route('/')
 def index():
     is_connected = session.get('lambda_connected', False)
@@ -308,7 +313,7 @@ def index():
                 A("Go to Inference Page", href=url_for('inference'), cls="link"),
                 A("Go to Training Page", href=url_for('training'), cls="link"),
                 A("Go to Results Page", href=url_for('results'), cls="link"),
-            class_="points"),
+                class_="points"),
         )
 
     content = Div(
@@ -345,7 +350,7 @@ def connect_lambda():
 
     status = instance_data.get("status")
 
-#todo caricare docker
+    #todo caricare docker
     if status != "active":
         flash(f"Lambda instance is not active (status: {status})", "error")
         return redirect(url_for('index'))
@@ -514,6 +519,12 @@ def training():
         steps = request.form["steps"]
         train_batch_size = request.form["train_batch_size"]
         n4 = request.form["N4"]
+        if controlnet_type.lower() == "canny":
+            print(controlnet_type)
+# controlnet canny
+        else:
+            print(controlnet_type)
+#controlnet hed
         gradient_accumulation_steps = None
         if "gradient_accumulation_steps" in request.form:
             gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
@@ -556,15 +567,20 @@ def training():
             f"--train_batch_size {shlex.quote(str(train_batch_size))}",
         ]
 
-        # only include optional ones when present
-        if resolution:               cmd.append(f"--resolution {shlex.quote(str(resolution))}")
-        if validation_steps:         cmd.append(f"--validation_steps {shlex.quote(str(validation_steps))}")
-        if mixed_precision:          cmd.append(f"--mixed_precision {shlex.quote(str(mixed_precision))}")
-        if checkpointing_steps:      cmd.append(f"--checkpointing_steps {shlex.quote(str(checkpointing_steps))}")
+        if resolution:
+            cmd.append(f"--resolution {shlex.quote(str(resolution))}")
+        if validation_steps:
+            cmd.append(f"--validation_steps {shlex.quote(str(validation_steps))}")
+        if mixed_precision:
+            cmd.append(f"--mixed_precision {shlex.quote(str(mixed_precision))}")
+        if checkpointing_steps:
+            cmd.append(f"--checkpointing_steps {shlex.quote(str(checkpointing_steps))}")
         if gradient_accumulation_steps:
             cmd.append(f"--gradient_accumulation_steps {shlex.quote(str(gradient_accumulation_steps))}")
-        if remote_validation_path:   cmd.append(f"--validation_image {shlex.quote(remote_validation_path)}")
-        if prompt:                   cmd.append(f"--prompt {shlex.quote(prompt)}")
+        if remote_validation_path:
+            cmd.append(f"--validation_image {shlex.quote(remote_validation_path)}")
+        if prompt:
+            cmd.append(f"--prompt {shlex.quote(prompt)}")
 
         command = " ".join(cmd)
         job_id = str(uuid.uuid4())
