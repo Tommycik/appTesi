@@ -7,6 +7,7 @@
     <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/static/js/training.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/js/training.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -135,7 +136,7 @@
       <workItem from="1755462461745" duration="5005000" />
       <workItem from="1755503756245" duration="12262000" />
       <workItem from="1755614283372" duration="6361000" />
-      <workItem from="1755788904361" duration="3806000" />
+      <workItem from="1755788904361" duration="5192000" />
     </task>
     <task id="LOCAL-00001" summary="flask app">
       <option name="closed" value="true" />
@@ -361,7 +362,15 @@
       <option name="project" value="LOCAL" />
       <updated>1755620504152</updated>
     </task>
-    <option name="localTasksCounter" value="29" />
+    <task id="LOCAL-00029" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+      <option name="closed" value="true" />
+      <created>1755793510294</created>
+      <option name="number" value="00029" />
+      <option name="presentableId" value="LOCAL-00029" />
+      <option name="project" value="LOCAL" />
+      <updated>1755793510294</updated>
+    </task>
+    <option name="localTasksCounter" value="30" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

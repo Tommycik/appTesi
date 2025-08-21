@@ -495,7 +495,6 @@ def preprocess_image():
 
 @app.route('/training', methods=["GET", "POST"])
 def training():
-    #todo sistemare differenza tra controlnet model e hub id
     if request.method == "POST":
         mode = request.form["mode"]
 
@@ -547,19 +546,15 @@ def training():
         learning_rate = request.form.get("learning_rate", "2e-6")
         steps = request.form["steps"]
         train_batch_size = request.form["train_batch_size"]
-        n4 = request.form["N4"]
-        if controlnet_type.lower() == "canny":
-            print(controlnet_type)
-# controlnet canny
-        else:
-            print(controlnet_type)
-#controlnet hed
+        n4 = request.form["N4"]#todo mixed precison e n4 se modello presistente gia quantizzato non può scegliere
         gradient_accumulation_steps = None
         if "gradient_accumulation_steps" in request.form:
             gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
         resolution = None
         if "resolution" in request.form:
             resolution = request.form["resolution"]
+            if resolution and int(resolution) > 512:
+                resolution = 512
         checkpointing_steps = None
         if "checkpointing_steps" in request.form:
             checkpointing_steps = request.form["checkpointing_steps"]
@@ -616,6 +611,7 @@ def training():
         work_queue.put({"job_id": job_id, "command": command})
         train_config = {
             "controlnet_type": controlnet_type,
+            "controlnet_model": controlnet_model,
             "N4": n4,
             "mixed_precision": mixed_precision,
             "steps": steps,
@@ -624,6 +620,7 @@ def training():
             "resolution": resolution,
             "checkpointing_steps": checkpointing_steps,
             "validation_steps": validation_steps,
+            "gradient_accumulation_steps": gradient_accumulation_steps,
             "validation_image": remote_validation_path or "default",
             "hub_model_id": hub_model_id,
         }
@@ -658,12 +655,16 @@ def training():
                 model_id.split("/")[-1],
                 value=model_id,
                 **{
-                    "data-controlnet-type": params.get("controlnet_type", "canny"),
-                    "data-n4": str(params.get("N4", False)).lower(),  # "true"/"false"
-                    "data-steps": params.get("steps", 1000),
-                    "data-train-batch-size": params.get("train_batch_size", 2),
-                    "data-learning-rate": params.get("learning_rate", "2e-6"),
-                    "data-mixed-precision": params.get("mixed_precision", "fp16"),
+                    "data_controlnet_type": params.get("controlnet_type", "canny"),
+                    "data_N4": params.get("N4", False),
+                    "data_steps": params.get("steps", 1000),
+                    "data_train_batch_size": params.get("train_batch_size", 2),
+                    "data_learning_rate": params.get("learning_rate", "2e-6"),
+                    "data_mixed_precision": params.get("mixed_precision", "fp16"),
+                    "data_gradient_accumulation_steps": params.get("gradient_accumulation_steps", 1),
+                    "data_resolution": params.get("resolution", 512),
+                    "data_checkpointing_steps": params.get("checkpointing_steps", 250),
+                    "data_validation_steps": params.get("validation_steps", 125),
                 }
             )
         )
@@ -723,6 +724,18 @@ def training():
         Label("Train Batch Size:", for_="train_batch_size"),
         Input(id="train_batch_size", name="train_batch_size", type="number", required=True, cls="input"),
 
+        Label("Gradient Accumulation Steps:"),
+        Input(id="gradient_accumulation_steps", name="gradient_accumulation_steps", type="number", value="1"),
+
+        Label("Resolution:"),
+        Input(id="resolution", name="resolution", type="number", value="512"),
+
+        Label("Checkpointing Steps:"),
+        Input(id="checkpointing_steps", name="checkpointing_steps", type="number", value="250"),
+
+        Label("Validation Steps:"),
+        Input(id="validation_steps", name="validation_steps", type="number", value="125"),
+
         Label("Validation Image (JPG):"),
         Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg", cls="input"),
 
@@ -735,8 +748,6 @@ def training():
             id="promptWrapper",
             style="display:none;"
         ),
-        Label("Hub Model ID:"),
-        Input(name="hub_model_id", required=True, cls="input"),
 
         Button("Start Training", type="submit", cls="button"),
 
