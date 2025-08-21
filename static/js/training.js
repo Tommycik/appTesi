@@ -23,3 +23,21 @@ document.getElementById("validationImage").addEventListener("change", function (
     document.getElementById("prompt").removeAttribute("required");
   }
 });
+
+document.getElementById("mode").addEventListener("change", function() {
+    const wrapper = document.getElementById("newModelControlnetWrapper");
+    if (this.value === "new") {
+        wrapper.style.display = "block";
+    } else {
+        wrapper.style.display = "none";
+    }
+});
+
+document.getElementById("controlnetSource").addEventListener("change", function() {
+    const existingWrapper = document.getElementById("existingControlnetWrapper");
+    if (this.value === "existing") {
+        existingWrapper.style.display = "block";
+    } else {
+        existingWrapper.style.display = "none";
+    }
+});

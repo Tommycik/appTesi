@@ -497,7 +497,20 @@ def training():
         if mode == "existing":
             model_id = request.form["existing_model"]
             hub_model_id = model_id
-            # allow possible override
+            params = model_info(hub_model_id)
+            reuse = request.form.get("reuse_as_controlnet", "yes")
+            if reuse == "yes":
+                controlnet_model = hub_model_id
+                controlnet_type = params.get("controlnet_type", "canny")
+            else:
+                controlnet_type = request.form["controlnet_type"]
+                if controlnet_type == "canny":
+                    controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
+                elif controlnet_type == "hed":
+                    controlnet_model = "Xlabs-AI/flux-controlnet-hed-diffusers"
+                else:
+                    controlnet_model = hub_model_id
+
         else:  # new model
             new_name = request.form["new_model_name"]
             hub_model_id = f"{HF_NAMESPACE}/{new_name}"
@@ -508,8 +521,24 @@ def training():
                 flash("Model with this name already exists on HuggingFace!", "error")
                 return redirect(url_for("training"))
 
-        controlnet_model = request.form["controlnet_model"]
-        controlnet_type = request.form["controlnet_type"]
+            controlnet_type = request.form["controlnet_type"]
+
+            # User chooses controlnet
+            controlnet_source = request.form.get("controlnet_source", "default")
+            if controlnet_source == "default":
+                #Pretrained models
+                if controlnet_type == "canny":
+                    controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
+                elif controlnet_type == "hed":
+                    controlnet_model = "Xlabs-AI/flux-controlnet-hed-diffusers"
+                else:
+                    controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"  # fallback
+            elif controlnet_source == "existing":
+                # User picked an existing model from HF repo
+                controlnet_model = request.form["existing_controlnet_model"]
+            else:
+                controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
+
         learning_rate = request.form.get("learning_rate", "2e-6")
         steps = request.form["steps"]
         train_batch_size = request.form["train_batch_size"]
@@ -634,10 +663,30 @@ def training():
             Label("Existing Model:"),
             Select(*options,
                    id="existingModel", name="existing_model"),
+            Label("Use existing model as ControlNet model too?"),
+            Select(Option("no", value="no"), Option("yes", value="yes"),
+                   name="reuse_as_controlnet", id="reuse_as_controlnet"),
+
             id="existingModelWrapper"
+
         ),
 
         Div(
+            Label("ControlNet Source:"),
+            Select(Option("Use default (based on Canny/HED)", value="default"), Option("Use existing model as ControlNet", value="existing"),
+                   name="controlnet_source", id="controlnetSource"),
+            Div(
+                Label("Select Existing ControlNet Model:"),
+                Select(
+                    *[
+                        Option(m["id"].split("/")[-1], value=m["id"])
+                        for m in models
+                    ],
+                    name="existing_controlnet_model"
+                ),
+                id="existingControlnetWrapper",
+                style="display:none;"
+            ),
             Label("New Model Name (Hub ID suffix):"),
             Input(name="new_model_name", id="newModelName", cls="input"),
             id="newModelWrapper", style="display:none;"
