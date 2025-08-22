@@ -459,7 +459,7 @@ def inference():
         Label("Guidance Scale (6.0):"),
         Input(type="number", name="guidance", step="0.5", value="6.0"),
         Label("Prompt:"), Input(type="text", name="prompt", required=True, cls="input"),
-        Label("Upload Images:"), Input(type="file", id="uploadInput", accept="image/*", multiple=True),
+        Label("Upload Images:"), Input(type="file",name="images", id="uploadInput", accept="image/*", multiple=True),
         Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid #ccc;"),
         Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button"),
         Input(type="hidden", name="control_image_data", id="controlImageData"),
@@ -472,6 +472,7 @@ def inference():
 @app.route("/preprocess_image", methods=["POST"])
 def preprocess_image():
     try:
+        print("Received form data:", request.files)
         files = request.files.getlist("images")
         model_id = request.form["model"]  #todo testare, potrebbe dare errore causa usa nome repo e non id
         print(model_id)
@@ -479,35 +480,64 @@ def preprocess_image():
         controlnet_type = params.get("controlnet_type", "canny")
         merged_image = None
 
-        for file in files:
-            image = Image.open(file.stream).convert("RGB")
-            temp_path = f"/tmp/{uuid.uuid4()}.jpg"
-            image.save(temp_path)
+        temp_files_to_clean = []
 
+        for file_storage in files:
+            temp_path = os.path.join(tempfile.gettempdir(),
+                                     secure_filename(file_storage.filename) + "_" + str(uuid.uuid4()))
+            temp_files_to_clean.append(temp_path)
+            file_storage.save(temp_path)
+
+            result_path = None
             if controlnet_type == "canny":
                 result_path = convert_to_canny(temp_path)
             elif controlnet_type == "hed":
                 result_path = convert_to_hed(temp_path)
             else:
-                return jsonify({"status": "error", "error": "Invalid model_type"})
+                return jsonify({"status": "error", "error": f"Invalid model_type: {controlnet_type}"})
+
+            # CRITICAL: Verify the file exists before proceeding.
+            if not os.path.exists(result_path):
+                raise FileNotFoundError(
+                    f"Processed image file was not created by the conversion function: {result_path}")
+
+            # Add the processed file to the cleanup list
+            if result_path and result_path != temp_path:
+                temp_files_to_clean.append(result_path)
 
             img_arr = cv2.imread(result_path, cv2.IMREAD_GRAYSCALE)
+            if img_arr is None:
+                raise ValueError(f"Failed to read processed image at {result_path}")
+
             if merged_image is None:
                 merged_image = img_arr
             else:
                 merged_image = cv2.add(merged_image, img_arr)
 
+        if merged_image is None:
+            return jsonify({"status": "error", "error": "No valid images were processed."}), 500
+
         # Convert merged_image back to RGB for canvas
         merged_rgb = cv2.cvtColor(merged_image, cv2.COLOR_GRAY2RGB)
-        merged_path = f"/tmp/{uuid.uuid4()}_merged.jpg"
+        merged_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}_merged.jpg")
+        temp_files_to_clean.append(merged_path)
         cv2.imwrite(merged_path, merged_rgb)
 
         with open(merged_path, "rb") as f:
             encoded = base64.b64encode(f.read()).decode("utf-8")
-            data_url = f"data:image/png;base64,{encoded}"
-            return jsonify({"status": "ok", "converted_data_url": data_url})
+            data_url = f"data:image/jpg;base64,{encoded}"
+
+        return jsonify({"status": "ok", "converted_data_url": data_url})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)})
+    finally:
+        # Cleanup temporary files in a robust way
+        for fpath in temp_files_to_clean:
+            try:
+                if os.path.exists(fpath):
+                    os.remove(fpath)
+            except OSError as e:
+                print(f"Error removing temporary file {fpath}: {e}")
 
 
 @app.route('/training', methods=["GET", "POST"])

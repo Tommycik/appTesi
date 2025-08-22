@@ -35,12 +35,13 @@ document.getElementById("uploadInput").addEventListener("change", async function
     const files = e.target.files;
     if (!files.length) return;
 
-    const modelType = document.getElementById("model").value;
+    const model = document.getElementById("model").value;
     const formData = new FormData();
+
     for (let file of files) {
         formData.append("images", file);
     }
-    formData.append("model_type", modelType);
+    formData.append("model", model);
 
     const response = await fetch("/preprocess_image", { method: "POST", body: formData });
     const data = await response.json();
