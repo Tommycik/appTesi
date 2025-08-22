@@ -427,9 +427,26 @@ def inference():
             P(f"Prompt: {prompt}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for result...", id="result-section"),
+            Script(f"""
+                    async function pollResult() {{
+                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
+                        const data = await res.json();
+                        if (data.status === "done") {{
+                            let resultDiv = document.getElementById("result-section");
+                            if (data.output.startsWith("http")) {{
+                                resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
+                            }} else {{
+                                resultDiv.innerHTML = "<p>" + data.output + "</p>";
+                            }}
+                        }} else {{
+                            setTimeout(pollResult, 2000);
+                        }}
+                    }}
+                    pollResult();
+                    """),
             id="content")
-        return str(base_layout("Waiting for Inference", content,
-                               extra_scripts=["js/polling.js"])), 200
+
+        return str(base_layout("Waiting for Inference", content)), 200
     models = models_list()
     options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
 
