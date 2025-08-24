@@ -381,7 +381,7 @@ def get_result(job_id):
 def inference():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
-        redirect(url_for('index'))
+        return redirect(url_for('index'))
     if request.method == "POST":
         prompt = request.form['prompt']
         scale = request.form.get('scale', 0.2)
@@ -550,7 +550,7 @@ def preprocess_image():
 def training():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
-        redirect(url_for('index'))
+        return redirect(url_for('index'))
     if request.method == "POST":
         mode = request.form["mode"]
 
@@ -891,7 +891,7 @@ def training():
 def results():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
-        redirect(url_for('index'))
+        return redirect(url_for('index'))
     #todo finire e risolvere problemi paginazione
     models = models_list()
     selected_model = request.args.get("model", "all")
