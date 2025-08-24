@@ -379,6 +379,9 @@ def get_result(job_id):
 
 @app.route('/inference', methods=["GET", "POST"])
 def inference():
+    is_connected = session.get('lambda_connected', False)
+    if not is_connected:
+        redirect(url_for('index'))
     if request.method == "POST":
         prompt = request.form['prompt']
         scale = request.form.get('scale', 0.2)
@@ -509,6 +512,8 @@ def preprocess_image():
             if img_arr is None:
                 raise ValueError(f"Failed to read processed image at {result_path}")
 
+            desired_size = (512, 512)
+            img_arr = cv2.resize(img_arr, desired_size, interpolation=cv2.INTER_AREA)
             if merged_image is None:
                 merged_image = img_arr
             else:
@@ -529,6 +534,7 @@ def preprocess_image():
 
         return jsonify({"status": "ok", "converted_data_url": data_url})
     except Exception as e:
+        print(e)
         return jsonify({"status": "error", "error": str(e)})
     finally:
         # Cleanup temporary files in a robust way
@@ -542,6 +548,9 @@ def preprocess_image():
 
 @app.route('/training', methods=["GET", "POST"])
 def training():
+    is_connected = session.get('lambda_connected', False)
+    if not is_connected:
+        redirect(url_for('index'))
     if request.method == "POST":
         mode = request.form["mode"]
 
@@ -567,10 +576,10 @@ def training():
             hub_model_id = f"{HF_NAMESPACE}/{new_name}"
 
             # check existence
-            existing = [m["id"] for m in models_list()]
-            if hub_model_id in existing:
-                flash("Model with this name already exists on HuggingFace!", "error")
-                return redirect(url_for("training"))
+            #existing = [m["id"] for m in models_list()]
+            #if hub_model_id in existing:
+            #   flash("Model with this name already exists on HuggingFace!", "error")
+            #    return redirect(url_for("training"))
 
             controlnet_type = request.form["controlnet_type"]
 
@@ -677,11 +686,21 @@ def training():
             yaml.safe_dump(train_config, f)
 
         api = HfApi()
+        api.create_repo(
+            repo_id=hub_model_id,
+            repo_type="model",
+            private=False,
+            exist_ok=True,
+            token=HUGGINGFACE_TOKEN
+        )
+
+        # Now you can upload
         api.upload_file(
             path_or_fileobj=yaml_path,
             path_in_repo="training_config.yaml",
             repo_id=hub_model_id,
-            repo_type="model"
+            repo_type="model",
+            token=HUGGINGFACE_TOKEN
         )
         content = Div(
             H2("Training Job Submitted"),
@@ -813,15 +832,67 @@ def training():
         ),
 
         Button("Start Training", type="submit", cls="button"),
+        Script("""
+            document.getElementById("existingModel").addEventListener("change", function() {
+                const selected = this.options[this.selectedIndex];
+                document.getElementById("controlnet_type").value = selected.dataset.controlnet_type;
+                document.getElementById("N4").value = selected.dataset.n4;
+                document.getElementById("steps").value = selected.dataset.steps;
+                document.getElementById("train_batch_size").value = selected.dataset.train_batch_size;
+                document.getElementById("learning_rate").value = selected.dataset.learning_rate;
+                document.getElementById("mixed_precision").value = selected.dataset.mixed_precision;
+                document.getElementById("gradient_accumulation_steps").value = selected.dataset.gradient_accumulation_steps;
+                document.getElementById("resolution").value = selected.dataset.resolution;
+                document.getElementById("checkpointing_steps").value = selected.dataset.checkpointing_steps;
+                document.getElementById("validation_steps").value = selected.dataset.validation_steps;
+            });
+    
+            // Show/hide prompt input if a validation image is uploaded
+            document.getElementById("validationImage").addEventListener("change", function () {
+                const wrapper = document.getElementById("promptWrapper");
+                
+                if (this.files.length > 0) {
+                    wrapper.style.display = "block";
+                    document.getElementById("prompt").setAttribute("required", "true");
+                } else {
+                    wrapper.style.display = "none";
+                    document.getElementById("prompt").removeAttribute("required");
+                }
+            });
+    
+            document.getElementById("mode").addEventListener("change", function() {
+                const newWrapper = document.getElementById("newModelWrapper");
+                const existingWrapper = document.getElementById("existingModelWrapper");
+                if (this.value === "new") {
+                    newWrapper.style.display = "block";
+                    existingWrapper.style.display = "none";
+                } else {
+                    newWrapper.style.display = "none";
+                    existingWrapper.style.display = "block";
+                }
+            });
+    
+            document.getElementById("controlnetSource").addEventListener("change", function() {
+                const existingWrapper = document.getElementById("existingControlnetWrapper");
+                if (this.value === "existing") {
+                    existingWrapper.style.display = "block";
+                } else {
+                    existingWrapper.style.display = "none";
+                }
+            });
+            """),
+        method="post", action=url_for("training"), enctype="multipart/form-data", id="trainingForm", cls="form",
 
-        method="post", enctype="multipart/form-data", id="trainingForm", cls="form"
-    ),
-    return str(base_layout("Training", form, extra_scripts=["js/training.js"])), 200
+    )
+    return str(base_layout("Training", form)), 200
 
 
 @app.route('/results', methods=["GET"])
 def results():
-    #todo finire
+    is_connected = session.get('lambda_connected', False)
+    if not is_connected:
+        redirect(url_for('index'))
+    #todo finire e risolvere problemi paginazione
     models = models_list()
     selected_model = request.args.get("model", "all")
     page = int(request.args.get("page", 1))
@@ -869,15 +940,17 @@ def results():
     cards = [Div(Img(src=url, cls="card-img"), cls="card") for url in image_urls]
 
     # Pagination controls
-    pagination = Div(cls="pagination")
+    pagination_children = []
     if page > 1:
-        pagination.append(
+        pagination_children.append(
             A("⬅ Previous", href=url_for("results", model=selected_model, page=page - 1), cls="button secondary")
         )
     if has_more:
-        pagination.append(
+        pagination_children.append(
             A("Next ➡", href=url_for("results", model=selected_model, page=page + 1), cls="button secondary")
         )
+
+    pagination = Div(*pagination_children, cls="pagination")
 
     content = Div(
         H1("Model Results", cls="hero-title"),

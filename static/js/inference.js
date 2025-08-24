@@ -15,7 +15,7 @@ canvas.addEventListener("mousemove", draw);
 
 function draw(e) {
     if (!drawing) return;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 0.5;
     ctx.lineCap = "round";
     ctx.strokeStyle = "white";
     ctx.lineTo(e.offsetX, e.offsetY);

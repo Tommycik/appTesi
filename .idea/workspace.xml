@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="risolto bug inferenza" />
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="risolvere problema caricamento multiplo">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/static/js/inference.js" beforeDir="false" afterPath="$PROJECT_DIR$/static/js/inference.js" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -133,7 +137,8 @@
       <workItem from="1755503756245" duration="12262000" />
       <workItem from="1755614283372" duration="6361000" />
       <workItem from="1755788904361" duration="5289000" />
-      <workItem from="1755892397841" duration="9796000" />
+      <workItem from="1755892397841" duration="9917000" />
+      <workItem from="1755903518508" duration="9629000" />
     </task>
     <task id="LOCAL-00001" summary="flask app">
       <option name="closed" value="true" />
@@ -399,7 +404,15 @@
       <option name="project" value="LOCAL" />
       <updated>1755902214280</updated>
     </task>
-    <option name="localTasksCounter" value="34" />
+    <task id="LOCAL-00034" summary="risolvere problema caricamento multiplo">
+      <option name="closed" value="true" />
+      <created>1755902340426</created>
+      <option name="number" value="00034" />
+      <option name="presentableId" value="LOCAL-00034" />
+      <option name="project" value="LOCAL" />
+      <updated>1755902340426</updated>
+    </task>
+    <option name="localTasksCounter" value="35" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -437,11 +450,12 @@
     <MESSAGE value="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js" />
     <MESSAGE value="training.js perfezionato" />
     <MESSAGE value="risolto bug inferenza" />
-    <option name="LAST_COMMIT_MESSAGE" value="risolto bug inferenza" />
+    <MESSAGE value="risolvere problema caricamento multiplo" />
+    <option name="LAST_COMMIT_MESSAGE" value="risolvere problema caricamento multiplo" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
-    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1755902053187" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1756048595632" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$testEnv.coverage" NAME="testEnv Coverage Results" MODIFIED="1754212302482" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$Flask__app_py_.coverage" NAME="Flask (app.py) Coverage Results" MODIFIED="1754219779563" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
