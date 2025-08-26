@@ -189,7 +189,7 @@ def worker():
                 # inference complete
                 results_db[job_id] = {"status": "done", "output": result_url}
 
-            elif "Step" in output and not re.search(r"_COMPLETE]\b", output, re.IGNORECASE):
+            elif "Step" in output and not re.search(r"_complete\b", output, re.IGNORECASE):
                 # training log: parse progress
                 match = re.search(r"Step (\d+)/(\d+)", output)
                 if match:
@@ -203,9 +203,8 @@ def worker():
                 results_db[job_id] = {"status": "error", "message": errors}
 
             else:
-                # finished successfully — build inference URL here
-                inference_url = url_for('inference', _external=True)
-                results_db[job_id] = {"status": "done", "output": inference_url}
+                # finished successfully
+                results_db[job_id] = {"status": "done", "output": "done"}
                 print("done")
 
         except Exception as e:
