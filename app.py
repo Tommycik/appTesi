@@ -206,6 +206,7 @@ def worker():
                 # finished successfully — build inference URL here
                 inference_url = url_for('inference', _external=True)
                 results_db[job_id] = {"status": "done", "output": inference_url}
+                print("done")
 
         except Exception as e:
             print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
