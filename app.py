@@ -189,7 +189,7 @@ def worker():
                 # inference complete
                 results_db[job_id] = {"status": "done", "output": result_url}
 
-            elif "Step" in output:
+            elif "Step" in output and not re.search(r"_COMPLETE]\b", output, re.IGNORECASE):
                 # training log: parse progress
                 match = re.search(r"Step (\d+)/(\d+)", output)
                 if match:
