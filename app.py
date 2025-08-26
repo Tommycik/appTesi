@@ -203,7 +203,9 @@ def worker():
                 results_db[job_id] = {"status": "error", "message": errors}
 
             else:
-                results_db[job_id] = {"status": "unknown", "message": output[-500:]}
+                # finished successfully — build inference URL here
+                inference_url = url_for('inference', _external=True)
+                results_db[job_id] = {"status": "done", "output": inference_url}
 
         except Exception as e:
             print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
@@ -617,9 +619,14 @@ def training():
         validation_steps = None
         if "validation_steps" in request.form:
             validation_steps = request.form["validation_steps"]
+
         mixed_precision = None
-        if "mixed_precision" in request.form:
-            mixed_precision = request.form["mixed_precision"]
+        if str(n4).lower() in ["true", "yes", "1"]:
+            # Force disable AMP if N4 is enabled
+            mixed_precision = "no"
+        else:
+            if "mixed_precision" in request.form:
+                mixed_precision = request.form["mixed_precision"]
         prompt = None
         remote_validation_path = None
         if 'validation_image' in request.files:
@@ -708,21 +715,16 @@ def training():
             P(f"Job ID: {job_id}"),
             Div("Waiting for training...", id="result-section"),
             Script(f"""
-                async function pollResult() {{
-                    const res = await fetch("{url_for('get_result', job_id=job_id)}");
-                    const data = await res.json();
-                    if (data.status === "done") {{
-                        let resultDiv = document.getElementById("result-section");
-                        if (data.output.startsWith("http")) {{
-                            resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
+                    async function pollResult() {{
+                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
+                        const data = await res.json();
+                        if (data.status === "done") {{
+                            window.location.href = "{url_for('inference')}";
                         }} else {{
-                            resultDiv.innerHTML = "<p>" + data.output + "</p>";
+                            setTimeout(pollResult, 2000);
                         }}
-                    }} else {{
-                        setTimeout(pollResult, 2000);
                     }}
-                }}
-                pollResult();
+                    pollResult();
                 """),
             id="content")
         return str(base_layout("Waiting for Training", content)), 200
@@ -794,8 +796,19 @@ def training():
         Label("ControlNet Type:", for_="controlnet_type"),
         Input(id="controlnet_type", name="controlnet_type", required=True, cls="input"),
 
-        Label("N4:", for_="N4"),
+        Label("Use N4 Quantization", for_="N4"),
         Select(Option("No", value="false"), Option("Yes", value="true"), id="N4", name="N4", cls="input"),
+
+        Div(
+            Label("Mixed Precision:"),
+            Select(
+                Option("no", value="no"),
+                Option("fp16", value="fp16"),
+                Option("bf16", value="bf16", selected=True),
+                name="mixed_precision", id="mixed_precision"
+            ),
+            id="mixed_precision_group"
+        ),
 
         Label("Learning Rate:"),
         Input(id="learning_rate", name="learning_rate", value="2e-6", cls="input"),
@@ -821,9 +834,6 @@ def training():
         Label("Validation Image (JPG):"),
         Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg", cls="input"),
 
-        Label("Mixed Precision:"),
-        Select(Option("fp16", value="fp16"), Option("bf16", value="bf16"),
-               id="mixed_precision", name="mixed_precision"),
         Div(
             Label("Prompt:", for_="prompt"),
             Input(id="prompt", name="prompt", cls="input"),
@@ -879,6 +889,23 @@ def training():
                 } else {
                     existingWrapper.style.display = "none";
                 }
+            });
+            
+            document.addEventListener("DOMContentLoaded", function() {
+              const n4Select = document.getElementById("N4");
+              const mpSelect = document.getElementById("mixed_precision");
+              const mpGroup = document.getElementById("mixed_precision_group");
+            
+              function toggleMixedPrecision() {
+                if (n4Select.value.toLowerCase() === "true") {
+                  mpGroup.style.display = "none";
+                } else {
+                  mpGroup.style.display = "block";
+                }
+              }
+            
+              n4Select.addEventListener("change", toggleMixedPrecision);
+              toggleMixedPrecision(); // run once on page load
             });
             """),
         method="post", action=url_for("training"), enctype="multipart/form-data", id="trainingForm", cls="form",
