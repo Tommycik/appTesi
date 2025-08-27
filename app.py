@@ -161,6 +161,117 @@ class SSHManager:
             return output, errors
 
 
+# def setup_lambda_instance():
+#     if not LAMBDA_CLOUD_API_KEY:
+#         app.logger.error("Lambda API key is not configured — skipping setup.")
+#         return
+#
+#     instance_data = get_lambda_info()
+#     if not instance_data or instance_data.get("status") != "active":
+#         app.logger.error("Lambda instance is not active — skipping setup.")
+#         return
+#
+#     # Check if image exists remotely
+#     check_image_cmd = f"sudo docker images -q {DOCKER_IMAGE_NAME}"
+#     image_id, _ = ssh_manager.run_command(check_image_cmd)
+#
+#     if not image_id.strip():
+#         app.logger.info(f"Pulling Docker image {DOCKER_IMAGE_NAME} on Lambda...")
+#         ssh_manager.run_command(f"sudo docker pull {DOCKER_IMAGE_NAME}")
+#     else:
+#         app.logger.info(f"Image {DOCKER_IMAGE_NAME} already present on Lambda — skipping pull.")
+#
+#     # Stop & remove any existing container
+#     ssh_manager.run_command("sudo docker stop controlnet || true")
+#     ssh_manager.run_command("sudo docker rm controlnet || true")
+#
+#     # Start the container (ensure Python is available in the image!)
+#     run_cmd = f"""
+#         sudo docker run -d --gpus all \
+#             --name controlnet \
+#             {DOCKER_IMAGE_NAME} sleep infinity
+#     """
+#     stdout, stderr = ssh_manager.run_command(run_cmd)
+#     if stderr:
+#         app.logger.error(f"Error starting container: {stderr}")
+#
+#     # Update repo inside the container
+#     update_repo_cmd = """
+#         sudo docker exec controlnet bash -c '
+#             cd /workspace/tesiControlNetFlux &&
+#             git reset --hard &&
+#             git pull origin main
+#         '
+#     """
+#     ssh_manager.run_command(update_repo_cmd)
+#     app.logger.info("Lambda container is ready.")
+#
+#
+# def run_setup_in_context():
+#     with app.app_context():
+#         setup_lambda_instance()
+#
+# # Start a background thread so app boot isn't blocked
+# threading.Thread(target=run_setup_in_context, daemon=True).start()
+
+@app.route('/connect_lambda')
+def connect_lambda():
+    if not LAMBDA_CLOUD_API_KEY:
+        flash('Lambda API key is not configured!', 'error')
+        return redirect(url_for('index'))
+
+    instance_data = get_lambda_info()
+
+    if not instance_data:
+        flash("Lambda instance IP not found or failed to retrieve data.", "error")
+        return redirect(url_for('index'))
+
+    status = instance_data.get("status")
+
+    if status != "active":
+        flash(f"Lambda instance is not active (status: {status})", "error")
+        return redirect(url_for('index'))
+
+    command = f"""
+            echo "127.0.0.1 $(hostname)" | sudo tee -a /etc/hosts &&
+            # Set reliable DNS and disable IPv6 in Docker
+            echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf &&
+            echo '{{ "ipv6": false }}' | sudo tee /etc/docker/daemon.json &&
+            sudo systemctl restart docker &&
+            sudo docker image inspect {DOCKER_IMAGE_NAME} >/dev/null 2>&1 || sudo docker pull {DOCKER_IMAGE_NAME} &&
+            sudo docker stop controlnet || true &&
+            sudo docker rm controlnet || true &&
+            sudo docker run -d --gpus all \
+                --name controlnet \
+                --entrypoint python3 \
+                {DOCKER_IMAGE_NAME} -c "import time; time.sleep(1e9)"
+        """
+    stdout, stderr = ssh_manager.run_command(command)
+    status, _ = ssh_manager.run_command("sudo docker inspect -f '{{.State.Running}}' controlnet || echo false")
+    if "true" not in status.lower():
+        logs, _ = ssh_manager.run_command("sudo docker logs controlnet")
+        raise RuntimeError(f"controlnet container failed to stay up:\n{logs}")
+    # 2. Aggiorna la repo dentro al container
+    update_repo_cmd = """
+            sudo docker exec controlnet bash -c '
+                cd /workspace/tesiControlNetFlux &&
+                git reset --hard &&
+                git pull origin main
+            '
+        """
+    ssh_manager.run_command(update_repo_cmd)
+
+    if stderr and "no space left on device" in stderr.lower():
+        flash(f'Error during SSH: No space left on device. {stderr}', 'error')
+    elif stderr:
+        flash(f'SSH failed: {stderr}', 'error')
+    else:
+        flash('Successfully verified Lambda instance is up and SSH is working.', 'success')
+        session['lambda_connected'] = True
+
+    return redirect(url_for('index'))
+
+
 def worker():
     print("Worker thread has started and is ready to process jobs.")
     while True:
@@ -173,7 +284,15 @@ def worker():
 
         try:
             print(f"[{time.ctime()}] Worker: Starting job {job_id}")
-
+            status_cmd = "sudo docker inspect -f '{{.State.Running}}' controlnet 2>/dev/null || echo false"
+            out, _ = ssh_manager.run_command(status_cmd)
+            if "true" not in out.lower():
+                # Either start it or recreate it
+                ssh_manager.run_command(
+                    f"sudo docker start controlnet || "
+                    f"sudo docker run -d --gpus all --name controlnet "
+                    f"--entrypoint python3 {DOCKER_IMAGE_NAME} -c \"import time; time.sleep(1e9)\""
+                )
             output, errors = ssh_manager.run_command(command)
 
             print(f"[{time.ctime()}] Worker: Job {job_id} completed.")
@@ -272,11 +391,12 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             A("Inference", href=url_for('inference'), class_="nav-link"),
             A("Training", href=url_for('training'), class_="nav-link"),
             A("Results", href=url_for('results'), class_="nav-link"),
-            class_="main-nav"
+            class_="nav",
         )
     else:
         navigation = Nav(
             A("Connect to Lambda", href=url_for('connect_lambda'), class_="nav-link"),
+            class_="nav",
         )
 
     scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
@@ -338,39 +458,6 @@ def index():
     return str(base_layout("Home", content)), 200
 
 
-@app.route('/connect_lambda')
-def connect_lambda():
-    if not LAMBDA_CLOUD_API_KEY:
-        flash('Lambda API key is not configured!', 'error')
-        return redirect(url_for('index'))
-
-    instance_data = get_lambda_info()
-
-    if not instance_data:
-        flash("Lambda instance IP not found or failed to retrieve data.", "error")
-        return redirect(url_for('index'))
-
-    status = instance_data.get("status")
-
-    #todo caricare docker
-    if status != "active":
-        flash(f"Lambda instance is not active (status: {status})", "error")
-        return redirect(url_for('index'))
-
-    command = "source venv_flux/bin/activate && cd tesiControlNetFlux/Src"
-    stdout, stderr = ssh_manager.run_command(command)  # command for docker
-
-    if stderr and "no space left on device" in stderr.lower():
-        flash(f'Error during SSH: No space left on device. {stderr}', 'error')
-    elif stderr:
-        flash(f'SSH failed: {stderr}', 'error')
-    else:
-        flash('Successfully verified Lambda instance is up and SSH is working.', 'success')
-        session['lambda_connected'] = True
-
-    return redirect(url_for('index'))
-
-
 @app.route('/job_result/<job_id>', methods=["GET"])
 def get_result(job_id):
     result = results_db.get(job_id)
@@ -415,12 +502,13 @@ def inference():
                     os.remove(control_image_path)
         # Call Lambda via SSH
         command = (
-            f"export CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} &&"
-            f"export HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} &&"
-            f"export CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} &&"
-            f"export CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} &&"
-            f"source venv_flux/bin/activate && cd tesiControlNetFlux/Src && python3 scripts/controlnet_infer_api.py "
-            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} --controlnet_model {model_id} --N4 {n4} --controlnet_type {model_type}"
+            f"sudo docker exec -e CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
+            f"-e HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
+            f"-e CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
+            f"-e CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} "
+            f"controlnet python3 /workspace/tesiControlNetFlux/Src/scripts/controlnet_infer_api.py "
+            f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} "
+            f"--controlnet_model {model_id} --N4 {n4} --controlnet_type {model_type}"
         )
         if remote_control_path:
             command += f" --control_image {remote_control_path} "
@@ -464,7 +552,7 @@ def inference():
         Label("Guidance Scale (6.0):"),
         Input(type="number", name="guidance", step="0.5", value="6.0"),
         Label("Prompt:"), Input(type="text", name="prompt", required=True, cls="input"),
-        Label("Upload Images:"), Input(type="file",name="images", id="uploadInput", accept="image/*", multiple=True),
+        Label("Upload Images:"), Input(type="file", name="images", id="uploadInput", accept="image/*", multiple=True),
         Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid #ccc;"),
         Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button"),
         Input(type="hidden", name="control_image_data", id="controlImageData"),
@@ -604,7 +692,7 @@ def training():
         learning_rate = request.form.get("learning_rate", "2e-6")
         steps = request.form["steps"]
         train_batch_size = request.form["train_batch_size"]
-        n4 = request.form["N4"]#todo mixed precison e n4 se modello presistente gia quantizzato non può scegliere
+        n4 = request.form["N4"]  #todo mixed precison e n4 se modello presistente gia quantizzato non può scegliere
         gradient_accumulation_steps = None
         if "gradient_accumulation_steps" in request.form:
             gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
@@ -642,9 +730,8 @@ def training():
                     os.remove(validation_image_path)
 
         cmd = [
-            f"export HUGGINGFACE_TOKEN={shlex.quote(str(HUGGINGFACE_TOKEN or ''))}", "&&",
-            "source venv_flux/bin/activate && cd tesiControlNetFlux/Src &&",
-            "python3 scripts/controlnet_training_api.py",
+            f"sudo docker exec -e HUGGINGFACE_TOKEN={shlex.quote(str(HUGGINGFACE_TOKEN or ''))} "
+            f"controlnet python3 /workspace/tesiControlNetFlux/Src/scripts/train_controlnet_flux.py "
             f"--learning_rate {shlex.quote(str(learning_rate))}",
             f"--steps {shlex.quote(str(steps))}",
             f"--hub_model_id {shlex.quote(hub_model_id)}",
@@ -774,7 +861,8 @@ def training():
 
         Div(
             Label("ControlNet Source:"),
-            Select(Option("Use default (based on Canny/HED)", value="default"), Option("Use existing model as ControlNet", value="existing"),
+            Select(Option("Use default (based on Canny/HED)", value="default"),
+                   Option("Use existing model as ControlNet", value="existing"),
                    name="controlnet_source", id="controlnetSource"),
             Div(
                 Label("Select Existing ControlNet Model:"),

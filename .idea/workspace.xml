@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="risolvere problema caricamento multiplo e training">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-    </list>
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="risolto bug fine training e ixed precision" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -139,7 +136,7 @@
       <workItem from="1755892397841" duration="9917000" />
       <workItem from="1755903518508" duration="11455000" />
       <workItem from="1756212283994" duration="4360000" />
-      <workItem from="1756216660431" duration="6759000" />
+      <workItem from="1756216660431" duration="7065000" />
     </task>
     <task id="LOCAL-00001" summary="flask app">
       <option name="closed" value="true" />
@@ -453,7 +450,15 @@
       <option name="project" value="LOCAL" />
       <updated>1756221640042</updated>
     </task>
-    <option name="localTasksCounter" value="40" />
+    <task id="LOCAL-00040" summary="risolto bug fine training e ixed precision">
+      <option name="closed" value="true" />
+      <created>1756223572443</created>
+      <option name="number" value="00040" />
+      <option name="presentableId" value="LOCAL-00040" />
+      <option name="project" value="LOCAL" />
+      <updated>1756223572443</updated>
+    </task>
+    <option name="localTasksCounter" value="41" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -493,7 +498,8 @@
     <MESSAGE value="risolto bug inferenza" />
     <MESSAGE value="risolvere problema caricamento multiplo" />
     <MESSAGE value="risolvere problema caricamento multiplo e training" />
-    <option name="LAST_COMMIT_MESSAGE" value="risolvere problema caricamento multiplo e training" />
+    <MESSAGE value="risolto bug fine training e ixed precision" />
+    <option name="LAST_COMMIT_MESSAGE" value="risolto bug fine training e ixed precision" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />

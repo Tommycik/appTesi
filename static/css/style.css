@@ -31,20 +31,30 @@ header h1 {
   font-size: 1.8rem;
 }
 
-.main-nav {
+.nav-link,
+.nav-link:visited {
+  color: #ecf0f1;
+  text-decoration: none !important;
+  font-weight: 500;
+}
+
+.nav-link:hover {
+  color: #1abc9c;
+}
+.nav {
   display: flex;
   justify-content: center;
   gap: 1.5rem;
   margin-top: 0.5rem;
 }
 
-.main-nav a {
+.nav-link {
   color: #ecf0f1;
-  text-decoration: none;
+  text-decoration: none !important;
   font-weight: 500;
   transition: color 0.2s;
 }
-.main-nav a:hover {
+.nav-link:hover {
   color: #1abc9c;
 }
 
