@@ -1,51 +1,112 @@
+/* Fullscreen base setup */
 html, body {
-  height: 100vh;
-  overflow: hidden;
-}
-
-.container, #main_div, #content {
-  min-height: 0;
-  max-height: none;
-  overflow-y: visible;
-  height: auto;
-}
-
-body {
-  min-height: 100vh;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
   margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* disable scroll */
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background: #f4f6f8;
-  text-align: center;
-  align-content: center;
+  display: flex;
+  flex-direction: column;
 }
 
+/* Reset links (avoid purple/underline) */
+a, a:visited, a:active, a:focus {
+  color: inherit;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: none;
+  color: #1abc9c;
+}
+
+/* Layout sections */
 header {
   background: #2c3e50;
   color: white;
-  padding: 1rem 2rem;
+  padding: 1rem;
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+.form-card {
+  background: white;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  max-width: 640px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+/* Group fields horizontally */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  width: 100%;
+}
+
+.form-row label {
+  flex: 1 1 40%;
+}
+.form-row input,
+.form-row select {
+  flex: 1 1 60%;
+}
+
+/* Fieldset styling */
+fieldset {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+}
+legend {
+  font-weight: 600;
+  padding: 0 0.5rem;
+  color: #2c3e50;
+}
+.points {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.points a {
+  display: inline-block;
+  background: #1abc9c;
+  color: white !important;
+  padding: 0.8rem 1.4rem;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s;
+  width: 220px;       /* fixed width for consistency */
+  text-align: center; /* center text inside button */
+}
+
+.points a:hover {
+  background: #16a085;
+}
+/* Centering utility */
+.center-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
   text-align: center;
 }
 
 header h1 {
   margin: 0;
   font-size: 1.8rem;
-}
-nav .nav-link,
-nav .nav-link:visited,
-nav .nav-link:active,
-nav .nav-link:focus {
-  color: #fff !important;
-  text-decoration: none !important;
-  font-weight: 500;
-  margin: 0 1rem;
-}
-
-nav .nav-link:hover {
-  color: #1abc9c !important;
-  text-decoration: none !important;
 }
 
 .nav {
@@ -54,52 +115,55 @@ nav .nav-link:hover {
   gap: 2rem;
   margin-top: 0.5rem;
 }
+.nav .nav-link {
+  color: #fff !important;
+  font-weight: 500;
+}
+.nav .nav-link:hover {
+  color: #1abc9c !important;
+}
 
+/* Main fills everything left */
 main {
-  flex-grow: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 0;
-}
-
-.container, #main_div, #content {
-  min-height: 0;
-  max-height: none;
-  overflow-y: visible;
-  height: auto;
-}
-#main_div, #content {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
   width: 100%;
-  padding: 2rem;
+  height: 100%;
 }
 
-#trainingForm {
-  min-height: 100vh;
-}
-.container {
+#main_div, #content {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-evenly;
-  margin: 0;
-  background: white;
-  border-radius: 12px;
+  justify-content: center;   /* center vertically */
+  align-items: center;       /* center horizontally */
   width: 100%;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  height: 100%;
+  padding: 1rem;
+  box-sizing: border-box;
+  overflow: hidden; /* no scrollbars */
 }
 
+/* Forms - more compact */
 form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.6rem;
   align-items: center;
+  background: white;
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  max-width: 480px;
+  width: 100%;
+}
+
+form label {
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+  color: #2c3e50;
+  align-self: flex-start;
 }
 
 input, select, button, canvas {
@@ -107,31 +171,54 @@ input, select, button, canvas {
   border: 1px solid #ccc;
   border-radius: 8px;
   font-size: 1rem;
+  width: 100%;
+  box-sizing: border-box;
 }
-.button, button, canvas {
-  margin-bottom: 1rem;
+
+canvas {
+  margin-top: 0.5rem;
+  background: black;
 }
-button {
-  background: #1abc9c;
-  color: white;
-  border: none;
-  cursor: pointer;
+
+button, .button, a.button {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.8rem 1.4rem;
+  border-radius: 8px;
   font-weight: 600;
+  cursor: pointer;
   transition: background 0.2s;
+  text-align: center;
+  border: none;
+  text-decoration: none;
 }
-button:hover {
+
+button, .button.primary, a.button.primary {
+  background: #1abc9c;
+  color: white !important;
+}
+button:hover, .button.primary:hover, a.button.primary:hover {
   background: #16a085;
 }
 
-footer {
-  text-align: center;
-  padding: 1rem;
-  margin-top: 0; /* Changed from 3rem to 0 */
-  font-size: 0.9rem;
-  color: #777;
+.button.secondary, a.button.secondary {
+  background: #ecf0f1;
+  color: #2c3e50 !important;
+}
+.button.secondary:hover, a.button.secondary:hover {
+  background: #d5dbdb;
 }
 
-/* Hero Section */
+/* Footer */
+footer {
+  text-align: center;
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  color: #777;
+  flex: 0 0 auto;
+}
+
+/* Hero section */
 .hero-title {
   font-size: 2rem;
   text-align: center;
@@ -146,74 +233,21 @@ footer {
   color: #555;
 }
 
-/* Buttons */
-.button {
-  display: inline-block;
-  padding: 0.8rem 1.4rem;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.button.primary {
-  background: #1abc9c;
-  color: white;
-}
-.button.primary:hover {
-  background: #16a085;
-}
-
-.link {
-  color: #1abc9c;
-  font-weight: 600;
-  text-decoration: none;
-}
-.link:hover {
-  text-decoration: underline;
-}
-
-form label {
-  font-weight: 600;
-  margin-bottom: 0.3rem;
-  display: block;
-  color: #2c3e50;
-}
-
-select {
-  padding: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  font-size: 1rem;
-}
-
-.points{
-
-}
-
-.pagination {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.button.secondary {
-  background: #ecf0f1;
-  color: #2c3e50;
-}
-
-.button.secondary:hover {
-  background: #d5dbdb;
-}
-.result-grid {
+/* Results grid */
+.card-grid {
+  flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
   gap: 1rem;
-  min-height: 40vh;
-  height: 40vh;
+  width: 100%;
+  height: 100%;
 }
+
+.result-grid {
+  display: contents; /* let grid-item expand */
+}
+
 .grid-item {
   background: #222;
   padding: 0.5rem;
@@ -221,21 +255,27 @@ select {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  width: 100%;
+  overflow: hidden;
 }
+
 .grid-item.full {
-  grid-column: 1 / span 2;
-  grid-row: 1 / span 2;
+  grid-column: span 2;
+  grid-row: span 2;
 }
+
 .card-img {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   border-radius: 6px;
 }
-.card-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: 2rem;
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  flex: 0 0 auto;
 }

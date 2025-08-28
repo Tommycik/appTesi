@@ -422,15 +422,17 @@ def index():
         action_section = Div(
             P("Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready."),
             A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), cls="button primary"),
+            cls="center-box"
         )
     else:
         action_section = Div(
             H2("Lambda instance is connected and Docker image is ready."),
             Div(
-                A("Go to Inference Page", href=url_for('inference'), cls="link"),
-                A("Go to Training Page", href=url_for('training'), cls="link"),
-                A("Go to Results Page", href=url_for('results'), cls="link"),
-                class_="points"),
+                A("Go to Inference Page", href=url_for('inference')),
+                A("Go to Training Page", href=url_for('training')),
+                A("Go to Results Page", href=url_for('results')),
+                class_="points"
+            ),
         )
 
     content = Div(
@@ -543,19 +545,29 @@ def inference():
     options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
 
     form = Form(
-        Select(*options, id="model", name="model"),
-        Label("Conditioning Scale (0.2):"),
-        Input(type="number", name="scale", step="0.1", value="0.2"),
-        Label("Steps (50):"),
-        Input(type="number", name="steps", value="50"),
-        Label("Guidance Scale (6.0):"),
-        Input(type="number", name="guidance", step="0.5", value="6.0"),
-        Label("Prompt:"), Input(type="text", name="prompt", required=True, cls="input"),
-        Label("Upload Images:"), Input(type="file", name="images", id="uploadInput", accept="image/*", multiple=True),
-        Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid #ccc;"),
-        Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button"),
-        Input(type="hidden", name="control_image_data", id="controlImageData"),
-        Button("Submit", type="submit", cls="button"),
+        Fieldset(
+            Legend("Model Selection"),
+            Select(*options, id="model", name="model"),
+        ),
+        Fieldset(
+            Legend("Parameters"),
+            Div(
+                Label("Scale:"), Input(type="number", name="scale", step="0.1", value="0.2"),
+                Label("Steps:"), Input(type="number", name="steps", value="50"),
+                Label("Guidance:"), Input(type="number", name="guidance", step="0.5", value="6.0"),
+                cls="form-row"
+            )
+        ),
+        Fieldset(
+            Legend("Prompt & Control Image"),
+            Label("Prompt:"), Input(type="text", name="prompt", required=True, cls="input"),
+            Label("Upload Image:"),
+            Input(type="file", name="images", id="uploadInput", accept="image/*", multiple=True),
+            Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid #ccc;"),
+            Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button secondary"),
+            Input(type="hidden", name="control_image_data", id="controlImageData")
+        ),
+        Button("Run Inference", type="submit", cls="button primary"),
         Script(f"""
                     document.addEventListener("DOMContentLoaded", function () {{
                         const canvas = document.getElementById("drawCanvas");
@@ -625,7 +637,10 @@ def inference():
                             }});
                         }});
         """),
-        method="post", id="content", enctype="multipart/form-data")
+        method="post",
+        id="content",
+        enctype="multipart/form-data",
+        cls="form-card",)
 
     return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])), 200
 
@@ -760,7 +775,7 @@ def training():
         learning_rate = request.form.get("learning_rate", "2e-6")
         steps = request.form["steps"]
         train_batch_size = request.form["train_batch_size"]
-        n4 = request.form["N4"]  #todo mixed precison e n4 se modello presistente gia quantizzato non può scegliere
+        n4 = request.form.get("N4", False)
         gradient_accumulation_steps = None
         if "gradient_accumulation_steps" in request.form:
             gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
@@ -913,96 +928,81 @@ def training():
             )
         )
     form = Form(
-        Label("Mode:"),
-        Select(
-            Option("Fine-tune existing model", value="existing"),
-            Option("Create new model", value="new"),
-            id="mode", name="mode"
-        ),
-
-        Div(
-            Label("Existing Model:"),
-            Select(*options,
-                   id="existingModel", name="existing_model"),
-            Label("Use existing model as ControlNet model too?"),
-            Select(Option("no", value="no"), Option("yes", value="yes"),
-                   name="reuse_as_controlnet", id="reuse_as_controlnet"),
-
-            id="existingModelWrapper"
-
-        ),
-
-        Div(
-            Label("ControlNet Source:"),
-            Select(Option("Use default (based on Canny/HED)", value="default"),
-                   Option("Use existing model as ControlNet", value="existing"),
-                   name="controlnet_source", id="controlnetSource"),
-            Div(
-                Label("Select Existing ControlNet Model:"),
-                Select(
-                    *[
-                        Option(m["id"].split("/")[-1], value=m["id"])
-                        for m in models
-                    ],
-                    name="existing_controlnet_model"
-                ),
-                id="existingControlnetWrapper",
-                style="display:none;"
-            ),
-            Label("New Model Name (Hub ID suffix):"),
-            Input(name="new_model_name", id="newModelName", cls="input"),
-            id="newModelWrapper", style="display:none;"
-        ),
-
-        Label("ControlNet Type:", for_="controlnet_type"),
-        Input(id="controlnet_type", name="controlnet_type", required=True, cls="input"),
-
-        Label("Use N4 Quantization", for_="N4"),
-        Select(Option("No", value="false"), Option("Yes", value="true"), id="N4", name="N4", cls="input"),
-
-        Div(
-            Label("Mixed Precision:"),
+        Fieldset(
+            Legend("Mode"),
             Select(
-                Option("no", value="no"),
-                Option("fp16", value="fp16"),
-                Option("bf16", value="bf16", selected=True),
-                name="mixed_precision", id="mixed_precision"
+                Option("Fine-tune existing model", value="existing"),
+                Option("Create new model", value="new"),
+                id="mode", name="mode"
             ),
-            id="mixed_precision_group"
+            Div(  # Existing model block
+                Label("Existing Model:"),
+                Select(*options, id="existingModel", name="existing_model"),
+                Label("Reuse as ControlNet?"),
+                Select(Option("No", value="no"), Option("Yes", value="yes"), name="reuse_as_controlnet"),
+                id="existingModelWrapper"
+            ),
+            Div(  # New model block
+                Label("New Model Name:"), Input(name="new_model_name"),
+                Label("ControlNet Type:"), Input(id="controlnet_type", name="controlnet_type"),
+                id="newModelWrapper", style="display:none;"
+            )
         ),
-
-        Label("Learning Rate:"),
-        Input(id="learning_rate", name="learning_rate", value="2e-6", cls="input"),
-
-        Label("Training Steps:", for_="steps"),
-        Input(id="steps", name="steps", type="number", required=True, cls="input"),
-
-        Label("Train Batch Size:", for_="train_batch_size"),
-        Input(id="train_batch_size", name="train_batch_size", type="number", required=True, cls="input"),
-
-        Label("Gradient Accumulation Steps:"),
-        Input(id="gradient_accumulation_steps", name="gradient_accumulation_steps", type="number", value="1"),
-
-        Label("Resolution:"),
-        Input(id="resolution", name="resolution", type="number", value="512"),
-
-        Label("Checkpointing Steps:"),
-        Input(id="checkpointing_steps", name="checkpointing_steps", type="number", value="250"),
-
-        Label("Validation Steps:"),
-        Input(id="validation_steps", name="validation_steps", type="number", value="125"),
-
-        Label("Validation Image (JPG):"),
-        Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg", cls="input"),
-
-        Div(
-            Label("Prompt:", for_="prompt"),
-            Input(id="prompt", name="prompt", cls="input"),
-            id="promptWrapper",
-            style="display:none;"
+        Fieldset(
+            Legend("Quantization & Precision"),
+            Div(
+                Label("Use N4 Quantization"),
+                Select(
+                    Option("No", value="false"),
+                    Option("Yes", value="true"),
+                    id="N4", name="N4"
+                ),
+                cls="form-row"
+            ),
+            Div(
+                Label("Mixed Precision"),
+                Select(
+                    Option("no", value="no"),
+                    Option("fp16", value="fp16"),
+                    Option("bf16", value="bf16", selected=True),
+                    name="mixed_precision", id="mixed_precision"
+                ),
+                id="mixed_precision_group",
+                cls="form-row"
+            )
         ),
-
-        Button("Start Training", type="submit", cls="button"),
+        Fieldset(
+            Legend("Training Parameters"),
+            Div(
+                Label("Learning Rate:"), Input(id="learning_rate", name="learning_rate", value="2e-6"),
+                Label("Steps:"), Input(id="steps", name="steps", type="number"),
+                cls="form-row"
+            ),
+            Div(
+                Label("Batch Size:"), Input(id="train_batch_size", name="train_batch_size", type="number"),
+                Label("Gradient Accumulation:"),
+                Input(id="gradient_accumulation_steps", name="gradient_accumulation_steps", type="number", value="1"),
+                cls="form-row"
+            ),
+            Div(
+                Label("Resolution:"), Input(id="resolution", name="resolution", type="number", value="512"),
+                Label("Checkpoint Steps:"),
+                Input(id="checkpointing_steps", name="checkpointing_steps", type="number", value="250"),
+                cls="form-row"
+            ),
+            Div(
+                Label("Validation Steps:"),
+                Input(id="validation_steps", name="validation_steps", type="number", value="125"),
+                cls="form-row"
+            )
+        ),
+        Fieldset(
+            Legend("Validation"),
+            Label("Validation Image:"),
+            Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg"),
+            Div(Label("Prompt:"), Input(id="prompt", name="prompt"), id="promptWrapper", style="display:none;")
+        ),
+        Button("Start Training", type="submit", cls="button primary"),
         Script("""
             document.getElementById("existingModel").addEventListener("change", function() {
                 const selected = this.options[this.selectedIndex];
@@ -1069,8 +1069,10 @@ def training():
               toggleMixedPrecision(); // run once on page load
             });
             """),
-        method="post", action=url_for("training"), enctype="multipart/form-data", id="trainingForm", cls="form",
-
+        method="post",
+        id="trainingForm",
+        cls="form-card"
+            #action=url_for("training"), enctype="multipart/form-data"
     )
     return str(base_layout("Training", form)), 200
 
@@ -1121,60 +1123,43 @@ def results():
         method="get", cls="form"
     )
 
-    # Costruisci la griglia dei risultati
-    result_grids = []
+    grids = []
     for url in image_urls:
+        base_id = url.split("/")[-1].split(".")[0]
+        control_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/image/upload/repo_control/{base_id}_control.jpg"
+        text_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/raw/upload/repo_text/{base_id}_text"
+
+        params_text, prompt_text, control_img_tag = "", "", ""
+
+        # Try to fetch metadata
         try:
-            base_public_id = url.split("/")[-1].split(".")[0]
-        except Exception:
-            base_public_id = None
+            resp = requests.get(text_url)
+            if resp.status_code == 200:
+                params_text = resp.text
+                for line in params_text.splitlines():
+                    if line.lower().startswith("prompt:"):
+                        prompt_text = line
+        except:
+            pass
 
-        control_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/image/upload/repo_control/{base_public_id}_control.jpg" if base_public_id else None
-        text_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/raw/upload/repo_text/{base_public_id}_text" if base_public_id else None
-
-        # Recupera parametri e prompt
-        params_text = ""
+        # Try to fetch control image
         try:
-            if text_url:
-                resp = requests.get(text_url)
-                if resp.status_code == 200:
-                    params_text = resp.text
-        except Exception:
-            params_text = ""
+            if requests.head(control_url).status_code == 200:
+                control_img_tag = Img(src=control_url, cls="card-img")
+        except:
+            pass
 
-        # Recupera immagine di controllo
-        control_img_tag = ""
-        try:
-            if control_url:
-                resp = requests.head(control_url)
-                if resp.status_code == 200:
-                    control_img_tag = Img(src=control_url, cls="card-img")
-        except Exception:
-            control_img_tag = ""
-
-        # Prompt (se vuoi separarlo dal resto del testo)
-        prompt_text = ""
-        if params_text:
-            lines = params_text.splitlines()
-            for line in lines:
-                if line.lower().startswith("prompt:"):
-                    prompt_text = line
-                    break
-
-        if not control_img_tag and not params_text and not prompt_text:
-            # Espandi l'immagine su tutta la griglia
-            grid = Div(
-                Div(Img(src=url, cls="card-img"), class_="grid-item full"),
-                class_="result-grid"
-            )
+        if not (control_img_tag or params_text or prompt_text):
+            grid = Div(Div(Img(src=url, cls="card-img"), class_="grid-item full"), class_="result-grid")
         else:
             grid = Div(
                 Div(Img(src=url, cls="card-img"), class_="grid-item"),
-                Div(control_img_tag if control_img_tag else "", class_="grid-item"),
-                Div(params_text if params_text else "", class_="grid-item"),
-                Div(prompt_text if prompt_text else "", class_="grid-item"),
+                Div(control_img_tag, class_="grid-item") if control_img_tag else Div("", class_="grid-item"),
+                Div(Pre(params_text), class_="grid-item") if params_text else Div("", class_="grid-item"),
+                Div(prompt_text, class_="grid-item") if prompt_text else Div("", class_="grid-item"),
+                class_="result-grid"
             )
-    result_grids.append(grid)
+        grids.append(grid)
 
     # Paginazione
     pagination_children = []
@@ -1184,7 +1169,7 @@ def results():
         )
     if next_cursor:
         pagination_children.append(
-            A("Next ➡", href=url_for("results", model=selected_model, page=page + 1, next_cursor=next_cursor), cls="button secondary")
+            A("Next ➡", href=url_for("results", model=selected_model, next_cursor=next_cursor), cls="button secondary")
         )
     pagination = Div(*pagination_children, cls="pagination")
 
@@ -1192,7 +1177,7 @@ def results():
     content = Div(
         H1("Model Results", cls="hero-title"),
         model_selector,
-        Div(*result_grids, cls="card-grid"),
+        Div(*grids, cls="card-grid"),
         pagination
     )
 
