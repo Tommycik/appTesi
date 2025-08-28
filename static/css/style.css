@@ -20,7 +20,11 @@ a:hover {
   text-decoration: none;
   color: #1abc9c;
 }
-
+p {
+  text-align: center;
+  justify-content: center;
+  align-content: center;
+}
 /* Layout sections */
 header {
   background: #2c3e50;
@@ -72,14 +76,21 @@ legend {
 .points {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.8rem;
-  margin-top: 1rem;
+  align-items: center;     /* center horizontally */
+  justify-content: center; /* center vertically if needed */
+  gap: 1rem;
+  margin-top: 1.5rem;
+  width: 100%;
+    text-align: center;  /* ✅ centers inline content of <p> */
+}
+
+.points p {
+  margin: 0;
+  max-width: 600px;   /* optional: prevents lines being too wide */
 }
 
 .points a {
-  display: inline-block;
+  display: block;
   background: #1abc9c;
   color: white !important;
   padding: 0.8rem 1.4rem;
@@ -87,8 +98,9 @@ legend {
   font-weight: 600;
   text-decoration: none;
   transition: background 0.2s;
-  width: 220px;       /* fixed width for consistency */
-  text-align: center; /* center text inside button */
+  min-width: 220px;   /* ensures equal button width */
+  max-width: 300px;   /* avoids being too wide */
+  text-align: center; /* centers text inside the button */
 }
 
 .points a:hover {

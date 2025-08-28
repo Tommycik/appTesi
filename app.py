@@ -15,6 +15,7 @@ import numpy as np
 import paramiko
 import requests
 import yaml
+import sys
 from PIL import Image
 from cloudinary.api import resources
 from dotenv import load_dotenv
@@ -292,6 +293,7 @@ def worker():
             out, _ = ssh_manager.run_command(status_cmd)
             if "true" not in out.lower():
                 ssh_manager.run_command(
+                    f"sudo docker rm -f controlnet || true && "
                     f"sudo docker start controlnet || "
                     f"sudo docker run -d --gpus all --name controlnet "
                     f"--entrypoint python3 {DOCKER_IMAGE_NAME} -c \"import time; time.sleep(1e9)\""
@@ -489,7 +491,7 @@ def inference():
 
             # Check if image is completely white (or blank)
             np_image = np.array(image)
-            if not np.all(np_image == [0, 0, 0]):
+            if not np.all(np_image == 0):
                 import tempfile
                 control_image_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.jpg")
                 image.save(control_image_path)
