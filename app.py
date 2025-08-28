@@ -131,6 +131,10 @@ class SSHManager:
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.client.connect(hostname=self.ip, username=self.username, pkey=key)
+            # Imposta il keepalive ogni 30 secondi
+            transport = self.client.get_transport()
+            if transport:
+                transport.set_keepalive(30)
             print("SSH connected.")
         except Exception as e:
             print(f"SSH connection failed: {e}")
@@ -398,6 +402,7 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             Meta(charset="UTF-8"),
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title(f"ControlNet App - {title}"),
+            Link(rel="stylesheet", href="default.css"),
             Link(rel="stylesheet", href=url_for('static', filename='css/style.css', v=cache_buster))
         ),
         Body(
@@ -598,7 +603,7 @@ def inference():
                             }}
                             formData.append("model", model);
                     
-                            const response = await fetch("/preprocess_image", {{ method: "POST", body: formData });
+                            const response = await fetch("/preprocess_image", {{ method: "POST", body: formData }});
                             const data = await response.json();
                     
                             if (data.status === "ok") {{
@@ -1075,14 +1080,15 @@ def results():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
         return redirect(url_for('index'))
+
     models = models_list()
     selected_model = request.args.get("model", "all")
     page = int(request.args.get("page", 1))
-    per_page = 4  # Mostra solo 4 immagini per pagina
+    per_page = 4
 
+    # Recupera le immagini generate
     image_urls = []
     next_cursor = None
-
     try:
         if selected_model == "all":
             for m in models:
@@ -1098,7 +1104,7 @@ def results():
     except Exception as e:
         flash(f"Error fetching results: {e}", "error")
 
-    # Model selector
+    # Selettore modello
     options = [Option("All Models", value="all", selected=(selected_model == "all"))]
     for m in models:
         options.append(
@@ -1108,7 +1114,6 @@ def results():
                 selected=(selected_model == m["id"])
             )
         )
-
     model_selector = Form(
         Label("Select Model:", for_="model"),
         Select(*options, name="model", id="model"),
@@ -1116,10 +1121,62 @@ def results():
         method="get", cls="form"
     )
 
-    # Image gallery
-    cards = [Div(Img(src=url, cls="card-img"), cls="card") for url in image_urls]
+    # Costruisci la griglia dei risultati
+    result_grids = []
+    for url in image_urls:
+        try:
+            base_public_id = url.split("/")[-1].split(".")[0]
+        except Exception:
+            base_public_id = None
 
-    # Pagination controls
+        control_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/image/upload/repo_control/{base_public_id}_control.jpg" if base_public_id else None
+        text_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/raw/upload/repo_text/{base_public_id}_text" if base_public_id else None
+
+        # Recupera parametri e prompt
+        params_text = ""
+        try:
+            if text_url:
+                resp = requests.get(text_url)
+                if resp.status_code == 200:
+                    params_text = resp.text
+        except Exception:
+            params_text = ""
+
+        # Recupera immagine di controllo
+        control_img_tag = ""
+        try:
+            if control_url:
+                resp = requests.head(control_url)
+                if resp.status_code == 200:
+                    control_img_tag = Img(src=control_url, cls="card-img")
+        except Exception:
+            control_img_tag = ""
+
+        # Prompt (se vuoi separarlo dal resto del testo)
+        prompt_text = ""
+        if params_text:
+            lines = params_text.splitlines()
+            for line in lines:
+                if line.lower().startswith("prompt:"):
+                    prompt_text = line
+                    break
+
+        if not control_img_tag and not params_text and not prompt_text:
+            # Espandi l'immagine su tutta la griglia
+            grid = Div(
+                Div(Img(src=url, cls="card-img"), class_="grid-item full"),
+                class_="result-grid"
+            )
+        else:
+            grid = Div(
+                Div(Img(src=url, cls="card-img"), class_="grid-item"),
+                Div(control_img_tag if control_img_tag else "", class_="grid-item"),
+                Div(params_text if params_text else "", class_="grid-item"),
+                Div(prompt_text if prompt_text else "", class_="grid-item"),
+            )
+    result_grids.append(grid)
+
+    # Paginazione
     pagination_children = []
     if page > 1:
         pagination_children.append(
@@ -1129,13 +1186,13 @@ def results():
         pagination_children.append(
             A("Next ➡", href=url_for("results", model=selected_model, page=page + 1, next_cursor=next_cursor), cls="button secondary")
         )
-
     pagination = Div(*pagination_children, cls="pagination")
 
+    # Layout finale
     content = Div(
         H1("Model Results", cls="hero-title"),
         model_selector,
-        Div(*cards, cls="card-grid"),
+        Div(*result_grids, cls="card-grid"),
         pagination
     )
 

@@ -4,24 +4,22 @@ html, body {
 }
 
 .container, #main_div, #content {
-  min-height: 100vh;
-  max-height: 100vh;
-  overflow-y: auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: visible;
+  height: auto;
 }
 
 body {
-  font-family: 'Inter', sans-serif;
-  background: #f5f7fb;
-  margin: 0;
-  padding: 0;
-  color: #333;
   min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  align-content: center;
-  width: 100%;
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #f4f6f8;
   text-align: center;
-
+  align-content: center;
 }
 
 header {
@@ -35,16 +33,17 @@ header h1 {
   margin: 0;
   font-size: 1.8rem;
 }
-
-.nav-link,
-.nav-link:visited {
+nav .nav-link,
+nav .nav-link:visited,
+nav .nav-link:active,
+nav .nav-link:focus {
   color: #fff !important;
   text-decoration: none !important;
   font-weight: 500;
   margin: 0 1rem;
 }
 
-.nav-link:hover {
+nav .nav-link:hover {
   color: #1abc9c !important;
   text-decoration: none !important;
 }
@@ -61,23 +60,27 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
 }
-#main_div {
+
+.container, #main_div, #content {
+  min-height: 0;
+  max-height: none;
+  overflow-y: visible;
+  height: auto;
+}
+#main_div, #content {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
   gap: 20px;
   width: 100%;
+  padding: 2rem;
 }
-#content{
-  display: flex;
-  flex-direction: column;
-  justify-content: start;
-  gap: 20px;
-}
+
 #trainingForm {
   min-height: 100vh;
 }
@@ -88,10 +91,7 @@ main {
   margin: 0;
   background: white;
   border-radius: 12px;
-  min-height: 100vh;
-  max-height: 100vh;
   width: 100%;
-  height: auto;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
@@ -99,6 +99,7 @@ form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  align-items: center;
 }
 
 input, select, button, canvas {
@@ -107,7 +108,9 @@ input, select, button, canvas {
   border-radius: 8px;
   font-size: 1rem;
 }
-
+.button, button, canvas {
+  margin-bottom: 1rem;
+}
 button {
   background: #1abc9c;
   color: white;
@@ -202,4 +205,37 @@ select {
 
 .button.secondary:hover {
   background: #d5dbdb;
+}
+.result-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1rem;
+  min-height: 40vh;
+  height: 40vh;
+}
+.grid-item {
+  background: #222;
+  padding: 0.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+.grid-item.full {
+  grid-column: 1 / span 2;
+  grid-row: 1 / span 2;
+}
+.card-img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+}
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2rem;
 }
