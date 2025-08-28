@@ -33,7 +33,7 @@ SSH_PRIVATE_KEY_PATH = os.getenv('SSH_PRIVATE_KEY_PATH')
 HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
 DOCKER_IMAGE_NAME = os.getenv('DOCKER_IMAGE_NAME',
                               "your-dockerhub-username/controlnet-generator:latest")  # when docker is ready
-REGION = "us-west-3"
+REGION = os.getenv('REGION')
 CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
 CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY')
 CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
@@ -287,7 +287,6 @@ def worker():
             status_cmd = "sudo docker inspect -f '{{.State.Running}}' controlnet 2>/dev/null || echo false"
             out, _ = ssh_manager.run_command(status_cmd)
             if "true" not in out.lower():
-                # Either start it or recreate it
                 ssh_manager.run_command(
                     f"sudo docker start controlnet || "
                     f"sudo docker run -d --gpus all --name controlnet "
@@ -304,27 +303,18 @@ def worker():
             if url_match:
                 result_url = url_match.group(0)
 
-            if result_url:
-                # inference complete
+            # Parsing della percentuale
+            match = re.search(r"Step (\d+)/(\d+)", output)
+            if match and not re.search(r"_complete\b", output, re.IGNORECASE):
+                current, total = map(int, match.groups())
+                progress = int((current / total) * 100)
+                results_db[job_id] = {"status": "running", "progress": progress, "output": output}
+            elif result_url:
                 results_db[job_id] = {"status": "done", "output": result_url}
-
-            elif "Step" in output and not re.search(r"_complete\b", output, re.IGNORECASE):
-                # training log: parse progress
-                match = re.search(r"Step (\d+)/(\d+)", output)
-                if match:
-                    current, total = map(int, match.groups())
-                    progress = int((current / total) * 100)
-                    results_db[job_id] = {"status": "running", "progress": progress}
-                else:
-                    results_db[job_id] = {"status": "running", "message": output[-500:]}
-
             elif errors:
                 results_db[job_id] = {"status": "error", "message": errors}
-
             else:
-                # finished successfully
                 results_db[job_id] = {"status": "done", "output": "done"}
-                print("done")
 
         except Exception as e:
             print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
@@ -522,19 +512,23 @@ def inference():
             Div("Waiting for result...", id="result-section"),
             Script(f"""
                     async function pollResult() {{
-                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
+                        const res = await fetch("/job_result/" + job_id);
                         const data = await res.json();
+                        let resultDiv = document.getElementById("result-section");
                         if (data.status === "done") {{
-                            let resultDiv = document.getElementById("result-section");
-                            if (data.output.startsWith("http")) {{
+                            if (data.output && data.output.startsWith("http")) {{
                                 resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
                             }} else {{
                                 resultDiv.innerHTML = "<p>" + data.output + "</p>";
                             }}
+                        }} else if (data.status === "running") {{
+                            resultDiv.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p>`;
+                            setTimeout(pollResult, 2000);
                         }} else {{
+                            resultDiv.innerHTML = "<p>Waiting...</p>";
                             setTimeout(pollResult, 2000);
                         }}
-                    }}
+                            }}
                     pollResult();
                     """),
             id="content")
@@ -557,6 +551,75 @@ def inference():
         Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button"),
         Input(type="hidden", name="control_image_data", id="controlImageData"),
         Button("Submit", type="submit", cls="button"),
+        Script(f"""
+                    document.addEventListener("DOMContentLoaded", function () {{
+                        const canvas = document.getElementById("drawCanvas");
+                        const ctx = canvas.getContext("2d");
+                    
+                        ctx.fillStyle = "black";
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                        let drawing = false;
+                    
+                        canvas.addEventListener("mousedown", () => drawing = true);
+                        canvas.addEventListener("mouseup", () => {{
+                            drawing = false;
+                            ctx.beginPath();
+                        }});
+                        canvas.addEventListener("mousemove", function(e) {{
+                            if (!drawing) return;
+                            ctx.lineWidth = 0.5;
+                            ctx.lineCap = "round";
+                            ctx.strokeStyle = "white";
+                            ctx.lineTo(e.offsetX, e.offsetY);
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.moveTo(e.offsetX, e.offsetY);
+                        }});
+                    
+                        function clearCanvas() {{
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.fillStyle = "black";
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            window.convertedImage = null;
+                        }}
+                    
+                        document.getElementById("clearCanvasBtn").addEventListener("click", clearCanvas);
+                    
+                        document.getElementById("uploadInput").addEventListener("change", async function (e) {{
+                            const files = e.target.files;
+                            if (!files.length) return;
+                    
+                            const model = document.getElementById("model").value;
+                            const formData = new FormData();
+                    
+                            for (let file of files) {{
+                                formData.append("images", file);
+                            }}
+                            formData.append("model", model);
+                    
+                            const response = await fetch("/preprocess_image", {{ method: "POST", body: formData });
+                            const data = await response.json();
+                    
+                            if (data.status === "ok") {{
+                                const img = new Image();
+                                img.onload = function () {{
+                                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                    window.convertedImage = img;
+                                }};
+                                img.src = data.converted_data_url;
+                            }} else {{
+                                alert("Error: " + data.error);
+                                }}
+                        }});
+                    
+                        document.querySelector("form").addEventListener("submit", function () {{
+                            const dataURL = canvas.toDataURL("image/png");
+                            document.getElementById("controlImageData").value = dataURL;
+                            }});
+                        }});
+        """),
         method="post", id="content", enctype="multipart/form-data")
 
     return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])), 200
@@ -567,7 +630,7 @@ def preprocess_image():
     try:
         print("Received form data:", request.files)
         files = request.files.getlist("images")
-        model_id = request.form["model"]  #todo testare, potrebbe dare errore causa usa nome repo e non id
+        model_id = request.form["model"]
         print(model_id)
         params = model_info(model_id)
         controlnet_type = params.get("controlnet_type", "canny")
@@ -803,14 +866,19 @@ def training():
             Div("Waiting for training...", id="result-section"),
             Script(f"""
                     async function pollResult() {{
-                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
+                        const res = await fetch("/job_result/" + job_id);
                         const data = await res.json();
+                        let resultDiv = document.getElementById("result-section");
                         if (data.status === "done") {{
                             window.location.href = "{url_for('inference')}";
+                        }} else if (data.status === "running") {{
+                            resultDiv.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p>`;
+                            setTimeout(pollResult, 2000);
                         }} else {{
+                            resultDiv.innerHTML = "<p>Waiting...</p>";
                             setTimeout(pollResult, 2000);
                         }}
-                    }}
+                            }}
                     pollResult();
                 """),
             id="content")
@@ -1007,28 +1075,25 @@ def results():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
         return redirect(url_for('index'))
-    #todo finire e risolvere problemi paginazione
     models = models_list()
     selected_model = request.args.get("model", "all")
     page = int(request.args.get("page", 1))
-    per_page = 20
+    per_page = 4  # Mostra solo 4 immagini per pagina
 
     image_urls = []
-    has_more = False
+    next_cursor = None
 
     try:
         if selected_model == "all":
             for m in models:
                 model_name = m["id"].split("/")[-1]
-                res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page)
+                res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page, next_cursor=request.args.get("next_cursor"))
                 image_urls.extend([item["secure_url"] for item in res["resources"]])
+                next_cursor = res.get("next_cursor")
         else:
             model_name = selected_model.split("/")[-1]
-            res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page,
-                            context=True)
+            res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page, next_cursor=request.args.get("next_cursor"))
             image_urls = [item["secure_url"] for item in res["resources"]]
-            has_more = "next_cursor" in res
-
             next_cursor = res.get("next_cursor")
     except Exception as e:
         flash(f"Error fetching results: {e}", "error")
@@ -1060,9 +1125,9 @@ def results():
         pagination_children.append(
             A("⬅ Previous", href=url_for("results", model=selected_model, page=page - 1), cls="button secondary")
         )
-    if has_more:
+    if next_cursor:
         pagination_children.append(
-            A("Next ➡", href=url_for("results", model=selected_model, page=page + 1), cls="button secondary")
+            A("Next ➡", href=url_for("results", model=selected_model, page=page + 1, next_cursor=next_cursor), cls="button secondary")
         )
 
     pagination = Div(*pagination_children, cls="pagination")
