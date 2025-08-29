@@ -4,7 +4,8 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden; /* disable scroll */
+  overflow-x: hidden;   /* no horizontal scroll */
+  overflow-y: auto;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background: #f4f6f8;
   display: flex;
@@ -24,6 +25,10 @@ p {
   text-align: center;
   justify-content: center;
   align-content: center;
+}
+.button.loading {
+  opacity: 0.6;
+  pointer-events: none;
 }
 /* Layout sections */
 header {
@@ -81,7 +86,7 @@ legend {
   gap: 1rem;
   margin-top: 1.5rem;
   width: 100%;
-    text-align: center;  /* ✅ centers inline content of <p> */
+  text-align: center;  /* ✅ centers inline content of <p> */
 }
 
 .points p {
@@ -104,6 +109,35 @@ legend {
 }
 
 .points a:hover {
+  background: #16a085;
+}
+
+.points_links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;     /* center horizontally */
+  justify-content: flex-start; /* center vertically if needed */
+  gap: 10px;
+  margin-top: 1.5rem;
+  width: 100%;
+  text-align: center;  /* ✅ centers inline content of <p> */
+}
+
+.points_links a {
+  display: block;
+  background: #1abc9c;
+  color: white !important;
+  padding: 0.8rem 1.4rem;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s;
+  min-width: 220px;   /* ensures equal button width */
+  max-width: 300px;   /* avoids being too wide */
+  text-align: center; /* centers text inside the button */
+}
+
+.points_links a:hover {
   background: #16a085;
 }
 /* Centering utility */
@@ -144,7 +178,7 @@ main {
   height: 100%;
 }
 
-#main_div, #content {
+#main_div{
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -157,6 +191,17 @@ main {
   overflow: hidden; /* no scrollbars */
 }
 
+#content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  overflow-y: auto;  /* allow scroll for small screens */
+  min-height: 100%;
+  padding: 1rem;
+}
+
 /* Forms - more compact */
 form {
   display: flex;
@@ -167,7 +212,7 @@ form {
   padding: 1.5rem 2rem;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  max-width: 480px;
+  max-width: 100%;
   width: 100%;
 }
 
@@ -247,11 +292,10 @@ footer {
 
 /* Results grid */
 .card-grid {
-  flex: 1;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 1rem;
+  grid-template-rows: repeat(2, minmax(200px, 1fr));  /* smaller cells */
+  gap: 0.5rem;
   width: 100%;
   height: 100%;
 }
@@ -261,13 +305,13 @@ footer {
 }
 
 .grid-item {
-  background: #222;
-  padding: 0.5rem;
-  border-radius: 8px;
+  border: 2px solid #145a32; /* dark green */
+  border-radius: 6px;
+  background: #111;
   display: flex;
-  align-items: center;
   justify-content: center;
-  overflow: hidden;
+  align-items: center;
+  padding: 0.5rem;
 }
 
 .grid-item.full {

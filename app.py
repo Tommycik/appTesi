@@ -161,9 +161,13 @@ class SSHManager:
             if not self.client:
                 return None, "SSH client not connected"
             stdin, stdout, stderr = self.client.exec_command(command)
-            output = stdout.read().decode('utf-8', errors='replace').strip()
-            errors = stderr.read().decode('utf-8', errors='replace').strip()
-            return output, errors
+            out_chunks = []
+            err_chunks = []
+            for line in iter(stdout.readline, ""):
+                out_chunks.append(line)
+            for line in iter(stderr.readline, ""):
+                err_chunks.append(line)
+            return "".join(out_chunks), "".join(err_chunks)
 
 
 # def setup_lambda_instance():
@@ -222,59 +226,68 @@ class SSHManager:
 @app.route('/connect_lambda')
 def connect_lambda():
     if not LAMBDA_CLOUD_API_KEY:
-        flash('Lambda API key is not configured!', 'error')
-        return redirect(url_for('index'))
+        return str(base_layout("Error", P("Lambda API key is not configured!"))), 400
 
     instance_data = get_lambda_info()
-
     if not instance_data:
-        flash("Lambda instance IP not found or failed to retrieve data.", "error")
-        return redirect(url_for('index'))
+        return str(base_layout("Error", P("Lambda instance not found."))), 400
+    if instance_data.get("status") != "active":
+        return str(base_layout("Error", P(f"Instance not active (status={instance_data['status']})"))), 400
 
-    status = instance_data.get("status")
+    log_lines = []
+    def log(msg):
+        log_lines.append(msg)
+        print(msg)
 
-    if status != "active":
-        flash(f"Lambda instance is not active (status: {status})", "error")
-        return redirect(url_for('index'))
+    # Step 1: fix DNS, docker config
+    log("Configuring Docker daemon...")
+    ssh_manager.run_command("echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf")
+    ssh_manager.run_command("echo '{ \"ipv6\": false }' | sudo tee /etc/docker/daemon.json")
+    ssh_manager.run_command("sudo systemctl restart docker")
 
-    command = f"""
-            echo "127.0.0.1 $(hostname)" | sudo tee -a /etc/hosts &&
-            # Set reliable DNS and disable IPv6 in Docker
-            echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf &&
-            echo '{{ "ipv6": false }}' | sudo tee /etc/docker/daemon.json &&
-            sudo systemctl restart docker &&
-            sudo docker image inspect {DOCKER_IMAGE_NAME} >/dev/null 2>&1 || sudo docker pull {DOCKER_IMAGE_NAME} &&
-            sudo docker stop controlnet || true &&
-            sudo docker rm controlnet || true &&
-            sudo docker run -d --gpus all \
-                --name controlnet \
-                --entrypoint python3 \
-                {DOCKER_IMAGE_NAME} -c "import time; time.sleep(1e9)"
-        """
-    stdout, stderr = ssh_manager.run_command(command)
+    # Step 2: pull image
+    log(f"Pulling Docker image {DOCKER_IMAGE_NAME}...")
+    out, err = ssh_manager.run_command(f"sudo docker pull {DOCKER_IMAGE_NAME}")
+    log(out or err)
+
+    # Step 3: ensure container fresh
+    log("Removing any old container...")
+    ssh_manager.run_command("sudo docker rm -f controlnet || true")
+
+    # Step 4: run container
+    log("Starting new container...")
+    out, err = ssh_manager.run_command(
+        f"sudo docker run -d --gpus all --name controlnet "
+        f"--entrypoint python3 {DOCKER_IMAGE_NAME} -c 'import time; time.sleep(1e9)'"
+    )
+    log(out or err)
+
+    # Step 5: check running
     status, _ = ssh_manager.run_command("sudo docker inspect -f '{{.State.Running}}' controlnet || echo false")
     if "true" not in status.lower():
-        logs, _ = ssh_manager.run_command("sudo docker logs controlnet")
-        raise RuntimeError(f"controlnet container failed to stay up:\n{logs}")
-    # 2. Aggiorna la repo dentro al container
-    update_repo_cmd = """
-            sudo docker exec controlnet bash -c '
-                cd /workspace/tesiControlNetFlux &&
-                git reset --hard &&
-                git pull origin main
-            '
-        """
-    ssh_manager.run_command(update_repo_cmd)
+        exists, _ = ssh_manager.run_command("sudo docker ps -a --format '{{.Names}}' | grep -w controlnet || true")
+        if not exists.strip():
+            log("❌ Container was not created at all.")
+        else:
+            logs, _ = ssh_manager.run_command("sudo docker logs controlnet")
+            log("❌ Container failed to start:\n" + logs)
+        return str(base_layout("Connect Lambda Failed", Pre("\n".join(log_lines)))), 500
 
-    if stderr and "no space left on device" in stderr.lower():
-        flash(f'Error during SSH: No space left on device. {stderr}', 'error')
-    elif stderr:
-        flash(f'SSH failed: {stderr}', 'error')
-    else:
-        flash('Successfully verified Lambda instance is up and SSH is working.', 'success')
-        session['lambda_connected'] = True
+    # Step 6: update repo
+    log("Updating repo inside container...")
+    ssh_manager.run_command(
+        "sudo docker exec controlnet bash -c 'cd /workspace/tesiControlNetFlux &&  git pull '"
+    )
 
-    return redirect(url_for('index'))
+    session['lambda_connected'] = True
+    log("✅ Lambda is ready.")
+
+    content = Div(
+        H1("Connect Lambda Logs"),
+        Pre("\n".join(log_lines), style="text-align:left; background:#222; color:#0f0; padding:1rem; border-radius:8px; max-height:60vh; overflow:auto;"),
+        A("Continue to Home", href=url_for('index'), cls="button primary")
+    )
+    return str(base_layout("Connect Lambda", content)), 200
 
 
 def worker():
@@ -309,14 +322,19 @@ def worker():
             if url_match:
                 result_url = url_match.group(0)
 
-            # Parsing della percentuale
-            match = re.search(r"Step (\d+)/(\d+)", output)
-            if match and not re.search(r"_complete\b", output, re.IGNORECASE):
-                current, total = map(int, match.groups())
-                progress = int((current / total) * 100)
-                results_db[job_id] = {"status": "running", "progress": progress, "output": output}
-            elif result_url:
+            if result_url:
+                print("done")
                 results_db[job_id] = {"status": "done", "output": result_url}
+            elif "Step" in output and not re.search(r"_complete\b", output, re.IGNORECASE):
+                # training log: parse progress
+                match = re.search(r"Step (\d+)/(\d+)", output)
+                if match:
+                    current, total = map(int, match.groups())
+                    progress = int((current / total) * 100)
+                    results_db[job_id] = {"status": "running", "progress": progress}
+                else:
+                    results_db[job_id] = {"status": "running", "message": output[-500:]}
+
             elif errors:
                 results_db[job_id] = {"status": "error", "message": errors}
             else:
@@ -423,17 +441,23 @@ def index():
     if not is_connected:
         action_section = Div(
             P("Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready."),
-            A("Connect to Lambda & Pull Docker Image", href=url_for('connect_lambda'), cls="button primary"),
+            A("Connect to Lambda & Pull Docker Image",id="connectBtn", href=url_for('connect_lambda'), cls="button primary"),
             cls="center-box"
         )
     else:
         action_section = Div(
             H2("Lambda instance is connected and Docker image is ready."),
             Div(
-                A("Go to Inference Page", href=url_for('inference')),
-                A("Go to Training Page", href=url_for('training')),
-                A("Go to Results Page", href=url_for('results')),
-                class_="points"
+                A("Go to Inference Page", cls="button primary", href=url_for('inference')),
+                A("Go to Training Page", cls="button primary", href=url_for('training')),
+                A("Go to Results Page", cls="button primary", href=url_for('results')),
+                Script(f"""
+                            document.getElementById("connectBtn").addEventListener("click", function(){{
+                              this.innerText = "Connecting...";
+                              this.classList.add("loading");
+                              }});
+                            """),
+                class_="points_links"
             ),
         )
 
@@ -461,8 +485,8 @@ def index():
 def get_result(job_id):
     result = results_db.get(job_id)
     if result is None:
-        return jsonify({"status": "pending"})
-    return jsonify(result)
+        return jsonify({"status": "waiting"}), 200
+    return jsonify(result), 200
 
 
 @app.route('/inference', methods=["GET", "POST"])
@@ -497,6 +521,9 @@ def inference():
                 image.save(control_image_path)
                 remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.jpg"
                 scp_to_lambda(control_image_path, remote_control_path)
+                ssh_manager.run_command(
+                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/. controlnet:/workspace/tesiControlNetFlux/remote_inputs/")
+                remote_control_path = f"/workspace/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.jpg"
                 if control_image_path and os.path.exists(control_image_path):
                     os.remove(control_image_path)
         # Call Lambda via SSH
@@ -521,7 +548,7 @@ def inference():
             Div("Waiting for result...", id="result-section"),
             Script(f"""
                     async function pollResult() {{
-                        const res = await fetch("/job_result/" + job_id);
+                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
                         const data = await res.json();
                         let resultDiv = document.getElementById("result-section");
                         if (data.status === "done") {{
@@ -810,6 +837,9 @@ def training():
                 val_img.save(validation_image_path)
                 remote_validation_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}_{filename}"
                 scp_to_lambda(validation_image_path, remote_validation_path)
+                ssh_manager.run_command(
+                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/. controlnet:/workspace/tesiControlNetFlux/remote_inputs/")
+                remote_validation_path = f"/workspace/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}_{filename}"
                 prompt = request.form.get("prompt")  # only then get prompt
                 if validation_image_path and os.path.exists(validation_image_path):
                     os.remove(validation_image_path)
@@ -822,10 +852,9 @@ def training():
             f"--hub_model_id {shlex.quote(hub_model_id)}",
             f"--controlnet_model {shlex.quote(controlnet_model)}",
             f"--controlnet_type {shlex.quote(controlnet_type)}",
-            f"--N4 {str(bool(n4)).lower()}",
+            f"--N4 {str(bool(n4))}",
             f"--train_batch_size {shlex.quote(str(train_batch_size))}",
         ]
-
         if resolution:
             cmd.append(f"--resolution {shlex.quote(str(resolution))}")
         if validation_steps:
@@ -955,8 +984,8 @@ def training():
             Div(
                 Label("Use N4 Quantization"),
                 Select(
-                    Option("No", value="false"),
-                    Option("Yes", value="true"),
+                    Option("No", value=False),
+                    Option("Yes", value=True),
                     id="N4", name="N4"
                 ),
                 cls="form-row"
@@ -1005,8 +1034,8 @@ def training():
             Div(Label("Prompt:"), Input(id="prompt", name="prompt"), id="promptWrapper", style="display:none;")
         ),
         Button("Start Training", type="submit", cls="button primary"),
-        Script("""
-            document.getElementById("existingModel").addEventListener("change", function() {
+        Script(f"""
+            document.getElementById("existingModel").addEventListener("change", function() {{
                 const selected = this.options[this.selectedIndex];
                 document.getElementById("controlnet_type").value = selected.dataset.controlnet_type;
                 document.getElementById("N4").value = selected.dataset.n4;
@@ -1018,63 +1047,63 @@ def training():
                 document.getElementById("resolution").value = selected.dataset.resolution;
                 document.getElementById("checkpointing_steps").value = selected.dataset.checkpointing_steps;
                 document.getElementById("validation_steps").value = selected.dataset.validation_steps;
-            });
+            }});
     
             // Show/hide prompt input if a validation image is uploaded
-            document.getElementById("validationImage").addEventListener("change", function () {
+            document.getElementById("validationImage").addEventListener("change", function () {{
                 const wrapper = document.getElementById("promptWrapper");
                 
-                if (this.files.length > 0) {
+                if (this.files.length > 0) {{
                     wrapper.style.display = "block";
                     document.getElementById("prompt").setAttribute("required", "true");
-                } else {
+                }} else {{
                     wrapper.style.display = "none";
                     document.getElementById("prompt").removeAttribute("required");
-                }
-            });
+                }}
+            }});
     
-            document.getElementById("mode").addEventListener("change", function() {
+            document.getElementById("mode").addEventListener("change", function() {{
                 const newWrapper = document.getElementById("newModelWrapper");
                 const existingWrapper = document.getElementById("existingModelWrapper");
-                if (this.value === "new") {
+                if (this.value === "new") {{
                     newWrapper.style.display = "block";
                     existingWrapper.style.display = "none";
-                } else {
+                }} else {{
                     newWrapper.style.display = "none";
                     existingWrapper.style.display = "block";
-                }
-            });
+                }}
+            }});
     
-            document.getElementById("controlnetSource").addEventListener("change", function() {
+            document.getElementById("controlnetSource").addEventListener("change", function() {{
                 const existingWrapper = document.getElementById("existingControlnetWrapper");
-                if (this.value === "existing") {
+                if (this.value === "existing") {{
                     existingWrapper.style.display = "block";
-                } else {
+                }} else {{
                     existingWrapper.style.display = "none";
-                }
-            });
+                }}
+            }});
             
-            document.addEventListener("DOMContentLoaded", function() {
+            document.addEventListener("DOMContentLoaded", function() {{
               const n4Select = document.getElementById("N4");
               const mpSelect = document.getElementById("mixed_precision");
               const mpGroup = document.getElementById("mixed_precision_group");
             
-              function toggleMixedPrecision() {
-                if (n4Select.value.toLowerCase() === "true") {
+              function toggleMixedPrecision() {{
+                if (n4Select.value.toLowerCase() === "true") {{
                   mpGroup.style.display = "none";
-                } else {
+                }} else {{
                   mpGroup.style.display = "block";
-                }
-              }
+                }}
+              }}
             
               n4Select.addEventListener("change", toggleMixedPrecision);
               toggleMixedPrecision(); // run once on page load
-            });
+            }});
             """),
         method="post",
         id="trainingForm",
-        cls="form-card"
-            #action=url_for("training"), enctype="multipart/form-data"
+        cls="form-card",
+        action=url_for("training"), enctype="multipart/form-data"
     )
     return str(base_layout("Training", form)), 200
 
@@ -1109,22 +1138,20 @@ def results():
         flash(f"Error fetching results: {e}", "error")
 
     # Selettore modello
-    options = [Option("All Models", value="all", selected=(selected_model == "all"))]
+    model_options = [Option("All Models", value="all", selected=(selected_model == "all"))]
     for m in models:
-        options.append(
+        model_options.append(
             Option(
                 m["id"].split("/")[-1],
                 value=m["id"],
                 selected=(selected_model == m["id"])
             )
         )
-    model_selector = Form(
-        Label("Select Model:", for_="model"),
-        Select(*options, name="model", id="model"),
-        Button("Show Results", type="submit", cls="button"),
-        method="get", cls="form"
+    selector = Form(
+        Select(*model_options, name="model", onchange="this.form.submit()", value=selected_model, style="width:100%"),
+        method="get",
+        style="width:100%; margin-bottom:1rem;"
     )
-
     grids = []
     for url in image_urls:
         base_id = url.split("/")[-1].split(".")[0]
@@ -1150,12 +1177,12 @@ def results():
                 control_img_tag = Img(src=control_url, cls="card-img")
         except:
             pass
-
+        resized_url = f"{url}?w=512&h=512&c=fit"
         if not (control_img_tag or params_text or prompt_text):
-            grid = Div(Div(Img(src=url, cls="card-img"), class_="grid-item full"), class_="result-grid")
+            grid = Div(Div(Img(src=resized_url, cls="card-img"), class_="grid-item full"), class_="result-grid")
         else:
             grid = Div(
-                Div(Img(src=url, cls="card-img"), class_="grid-item"),
+                Div(Img(src=resized_url, cls="card-img"), class_="grid-item"),
                 Div(control_img_tag, class_="grid-item") if control_img_tag else Div("", class_="grid-item"),
                 Div(Pre(params_text), class_="grid-item") if params_text else Div("", class_="grid-item"),
                 Div(prompt_text, class_="grid-item") if prompt_text else Div("", class_="grid-item"),
@@ -1178,7 +1205,7 @@ def results():
     # Layout finale
     content = Div(
         H1("Model Results", cls="hero-title"),
-        model_selector,
+        selector,
         Div(*grids, cls="card-grid"),
         pagination
     )
