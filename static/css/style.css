@@ -113,11 +113,11 @@ legend {
 }
 
 .points_links {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
   align-items: center;     /* center horizontally */
-  justify-content: flex-start; /* center vertically if needed */
-  gap: 10px;
+  justify-content: center; /* center vertically if needed */
   margin-top: 1.5rem;
   width: 100%;
   text-align: center;  /* ✅ centers inline content of <p> */
@@ -128,8 +128,10 @@ legend {
   background: #1abc9c;
   color: white !important;
   padding: 0.8rem 1.4rem;
+  margin: 0.5rem 0 !important;
   border-radius: 8px;
   font-weight: 600;
+  width: fit-content;   /* each button sized to its content */
   text-decoration: none;
   transition: background 0.2s;
   min-width: 220px;   /* ensures equal button width */
@@ -158,15 +160,22 @@ header h1 {
 .nav {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 2rem;
   margin-top: 0.5rem;
 }
 .nav .nav-link {
   color: #fff !important;
   font-weight: 500;
+  flex: 0 0 auto;
+  padding: 0.4rem 0.8rem;       /* ensures gap applies correctly */
+  align-items: center;
+  border-radius: 6px;
+  transition: background 0.2s;
 }
 .nav .nav-link:hover {
   color: #1abc9c !important;
+  background: rgba(255,255,255,0.1);
 }
 
 /* Main fills everything left */
@@ -188,7 +197,8 @@ main {
   height: 100%;
   padding: 1rem;
   box-sizing: border-box;
-  overflow: hidden; /* no scrollbars */
+  overflow-y: auto;   /* ✅ allow scrolling */
+  overflow-x: hidden; /* no scrollbars */
 }
 
 #content {

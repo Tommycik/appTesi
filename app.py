@@ -262,6 +262,11 @@ def connect_lambda():
     )
     log(out or err)
 
+    log("Installing extra Python packages (pyyaml, huggingface_hub)...")
+    ssh_manager.run_command(
+        "sudo docker exec controlnet pip install --upgrade pip && "
+        "sudo docker exec controlnet pip install pyyaml huggingface_hub"
+    )
     # Step 5: check running
     status, _ = ssh_manager.run_command("sudo docker inspect -f '{{.State.Running}}' controlnet || echo false")
     if "true" not in status.lower():
@@ -402,15 +407,15 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
     if is_connected:
 
         navigation = Nav(
-            A("Inference", href=url_for('inference'), class_="nav-link"),
-            A("Training", href=url_for('training'), class_="nav-link"),
-            A("Results", href=url_for('results'), class_="nav-link"),
-            class_="nav",
+            A("Inference", href=url_for('inference'), cls="nav-link"),
+            A("Training", href=url_for('training'), cls="nav-link"),
+            A("Results", href=url_for('results'), cls="nav-link"),
+            cls="nav",
         )
     else:
         navigation = Nav(
-            A("Connect to Lambda", href=url_for('connect_lambda'), class_="nav-link"),
-            class_="nav",
+            A("Connect to Lambda", href=url_for('connect_lambda'), cls="nav-link"),
+            cls="nav",
         )
 
     scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
@@ -422,12 +427,11 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             Meta(charset="UTF-8"),
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title(f"ControlNet App - {title}"),
-            Link(rel="stylesheet", href="default.css"),
             Link(rel="stylesheet", href=url_for('static', filename='css/style.css', v=cache_buster))
         ),
         Body(
-            Header(H1("ControlNet App", class_="site-title"), navigation),
-            Main(Div(content, id="main_div", class_="container")),
+            Header(H1("ControlNet App", cls="site-title"), navigation),
+            Main(Div(content, id="main_div", cls="container")),
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts
         )
@@ -441,7 +445,14 @@ def index():
     if not is_connected:
         action_section = Div(
             P("Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready."),
-            A("Connect to Lambda & Pull Docker Image",id="connectBtn", href=url_for('connect_lambda'), cls="button primary"),
+            A("Connect to Lambda & Pull Docker Image",id="connectBtn", href=url_for('connect_lambda'), cls="button "
+                                                                                                           "primary"),
+            Script(f"""
+                document.getElementById("connectBtn").addEventListener("click", function(){{
+                  this.innerText = "Connecting...";
+                  this.classList.add("loading");
+                  }});
+                """),
             cls="center-box"
         )
     else:
@@ -451,13 +462,8 @@ def index():
                 A("Go to Inference Page", cls="button primary", href=url_for('inference')),
                 A("Go to Training Page", cls="button primary", href=url_for('training')),
                 A("Go to Results Page", cls="button primary", href=url_for('results')),
-                Script(f"""
-                            document.getElementById("connectBtn").addEventListener("click", function(){{
-                              this.innerText = "Connecting...";
-                              this.classList.add("loading");
-                              }});
-                            """),
-                class_="points_links"
+
+                cls="points_links"
             ),
         )
 
@@ -471,7 +477,7 @@ def index():
             P("Create a Lambda Cloud account & API Key."),
             P("Upload an SSH key pair to Lambda Cloud."),
             P(f"Start a Lambda instance with Docker installed (IP: {LAMBDA_INSTANCE_IP})."),
-            class_="points"
+            cls="points"
         ),
         Hr(),
         action_section,
@@ -756,6 +762,7 @@ def training():
     if request.method == "POST":
         mode = request.form["mode"]
 
+        controlnet_type = request.form["controlnet_type"]
         if mode == "existing":
             model_id = request.form["existing_model"]
             hub_model_id = model_id
@@ -763,40 +770,32 @@ def training():
             reuse = request.form.get("reuse_as_controlnet", "yes")
             if reuse == "yes":
                 controlnet_model = hub_model_id
-                controlnet_type = params.get("controlnet_type", "canny")
             else:
-                controlnet_type = request.form["controlnet_type"]
-                if controlnet_type == "canny":
+                controlnet_source = request.form.get("controlnet_source", "canny")
+                if controlnet_source == "canny":
                     controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
-                elif controlnet_type == "hed":
+                elif controlnet_source == "hed":
                     controlnet_model = "Xlabs-AI/flux-controlnet-hed-diffusers"
                 else:
-                    controlnet_model = hub_model_id
+                    controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
 
         else:  # new model
             new_name = request.form["new_model_name"]
             hub_model_id = f"{HF_NAMESPACE}/{new_name}"
 
             # check existence
-            #existing = [m["id"] for m in models_list()]
-            #if hub_model_id in existing:
-            #   flash("Model with this name already exists on HuggingFace!", "error")
-            #    return redirect(url_for("training"))
-
-            controlnet_type = request.form["controlnet_type"]
+            existing = [m["id"] for m in models_list()]
+            if hub_model_id in existing:
+                flash("Model with this name already exists on HuggingFace!", "error")
+                return redirect(url_for("training"))
 
             # User chooses controlnet
-            controlnet_source = request.form.get("controlnet_source", "default")
-            if controlnet_source == "default":
-                #Pretrained models
-                if controlnet_type == "canny":
-                    controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
-                elif controlnet_type == "hed":
-                    controlnet_model = "Xlabs-AI/flux-controlnet-hed-diffusers"
-                else:
-                    controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"  # fallback
+            controlnet_source = request.form.get("controlnet_source", "canny")
+            if controlnet_source == "canny":
+                controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
+            elif controlnet_source == "hed":
+                controlnet_model = "Xlabs-AI/flux-controlnet-hed-diffusers"
             elif controlnet_source == "existing":
-                # User picked an existing model from HF repo
                 controlnet_model = request.form["existing_controlnet_model"]
             else:
                 controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
@@ -804,7 +803,7 @@ def training():
         learning_rate = request.form.get("learning_rate", "2e-6")
         steps = request.form["steps"]
         train_batch_size = request.form["train_batch_size"]
-        n4 = request.form.get("N4", False)
+        n4 = request.form["N4"]
         gradient_accumulation_steps = None
         if "gradient_accumulation_steps" in request.form:
             gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
@@ -846,13 +845,13 @@ def training():
 
         cmd = [
             f"sudo docker exec -e HUGGINGFACE_TOKEN={shlex.quote(str(HUGGINGFACE_TOKEN or ''))} "
-            f"controlnet python3 /workspace/tesiControlNetFlux/Src/scripts/train_controlnet_flux.py "
+            f"controlnet python3 /workspace/tesiControlNetFlux/Src/scripts/controlnet_training_api.py "
             f"--learning_rate {shlex.quote(str(learning_rate))}",
             f"--steps {shlex.quote(str(steps))}",
             f"--hub_model_id {shlex.quote(hub_model_id)}",
             f"--controlnet_model {shlex.quote(controlnet_model)}",
             f"--controlnet_type {shlex.quote(controlnet_type)}",
-            f"--N4 {str(bool(n4))}",
+            f"--N4 {str(bool(n4)).lower()}",
             f"--train_batch_size {shlex.quote(str(train_batch_size))}",
         ]
         if resolution:
@@ -871,45 +870,10 @@ def training():
             cmd.append(f"--prompt {shlex.quote(prompt)}")
 
         command = " ".join(cmd)
+        print(command)
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
-        train_config = {
-            "controlnet_type": controlnet_type,
-            "controlnet_model": controlnet_model,
-            "N4": n4,
-            "mixed_precision": mixed_precision,
-            "steps": steps,
-            "train_batch_size": train_batch_size,
-            "learning_rate": learning_rate,
-            "resolution": resolution,
-            "checkpointing_steps": checkpointing_steps,
-            "validation_steps": validation_steps,
-            "gradient_accumulation_steps": gradient_accumulation_steps,
-            "validation_image": remote_validation_path or "default",
-            "hub_model_id": hub_model_id,
-        }
 
-        yaml_path = os.path.join(tempfile.gettempdir(), "training_config.yaml")
-        with open(yaml_path, "w") as f:
-            yaml.safe_dump(train_config, f)
-
-        api = HfApi()
-        api.create_repo(
-            repo_id=hub_model_id,
-            repo_type="model",
-            private=False,
-            exist_ok=True,
-            token=HUGGINGFACE_TOKEN
-        )
-
-        # Now you can upload
-        api.upload_file(
-            path_or_fileobj=yaml_path,
-            path_in_repo="training_config.yaml",
-            repo_id=hub_model_id,
-            repo_type="model",
-            token=HUGGINGFACE_TOKEN
-        )
         content = Div(
             H2("Training Job Submitted"),
             P(f"Model: {hub_model_id}"),
@@ -917,7 +881,7 @@ def training():
             Div("Waiting for training...", id="result-section"),
             Script(f"""
                     async function pollResult() {{
-                        const res = await fetch("/job_result/" + job_id);
+                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
                         const data = await res.json();
                         let resultDiv = document.getElementById("result-section");
                         if (data.status === "done") {{
@@ -946,7 +910,7 @@ def training():
                 value=model_id,
                 **{
                     "data_controlnet_type": params.get("controlnet_type", "canny"),
-                    "data_N4": params.get("N4", False),
+                    "data_N4": params.get("N4", "false"),
                     "data_steps": params.get("steps", 1000),
                     "data_train_batch_size": params.get("train_batch_size", 2),
                     "data_learning_rate": params.get("learning_rate", "2e-6"),
@@ -970,12 +934,37 @@ def training():
                 Label("Existing Model:"),
                 Select(*options, id="existingModel", name="existing_model"),
                 Label("Reuse as ControlNet?"),
-                Select(Option("No", value="no"), Option("Yes", value="yes"), name="reuse_as_controlnet"),
+                Select(Option("No", value="no"), Option("Yes", value="yes"), name="reuse_as_controlnet", id="reuse_as_controlnet"),
+                Div(
+                    Label("If not reusing, choose ControlNet Source:"),
+                    Select(
+                        Option("Default - Canny", value="canny"),
+                        Option("Default - HED", value="hed"),
+                        id="existing_controlnet_source", name="controlnet_source"
+                    ),
+                    id="existingControlnetSourceWrapper", style="display:none;"
+                ),
+
                 id="existingModelWrapper"
             ),
             Div(  # New model block
                 Label("New Model Name:"), Input(name="new_model_name"),
                 Label("ControlNet Type:"), Input(id="controlnet_type", name="controlnet_type"),
+                Div(
+                    Label("ControlNet Source:"),
+                    Select(
+                        Option("Default - Canny", value="canny"),
+                        Option("Default - HED", value="hed"),
+                        Option("Use Existing", value="existing"),
+                        id="controlnet_source", name="controlnet_source"
+                    ),
+                    Div(
+                        Label("Choose Existing ControlNet:"),
+                        Select(*options, id="existingControlnetModel", name="existing_controlnet_model"),
+                        id="existingControlnetWrapper", style="display:none;"
+                    ),
+                    cls="form-row"
+                ),
                 id="newModelWrapper", style="display:none;"
             )
         ),
@@ -984,8 +973,8 @@ def training():
             Div(
                 Label("Use N4 Quantization"),
                 Select(
-                    Option("No", value=False),
-                    Option("Yes", value=True),
+                    Option("No", value="false"),
+                    Option("Yes", value="true"),
                     id="N4", name="N4"
                 ),
                 cls="form-row"
@@ -1038,7 +1027,7 @@ def training():
             document.getElementById("existingModel").addEventListener("change", function() {{
                 const selected = this.options[this.selectedIndex];
                 document.getElementById("controlnet_type").value = selected.dataset.controlnet_type;
-                document.getElementById("N4").value = selected.dataset.n4;
+                document.getElementById("N4").value = selected.dataset.n4.toString().toLowerCase();;
                 document.getElementById("steps").value = selected.dataset.steps;
                 document.getElementById("train_batch_size").value = selected.dataset.train_batch_size;
                 document.getElementById("learning_rate").value = selected.dataset.learning_rate;
@@ -1048,7 +1037,22 @@ def training():
                 document.getElementById("checkpointing_steps").value = selected.dataset.checkpointing_steps;
                 document.getElementById("validation_steps").value = selected.dataset.validation_steps;
             }});
-    
+            document.getElementById("reuse_as_controlnet").addEventListener("change", function() {{
+                const wrapper = document.getElementById("existingControlnetSourceWrapper");
+                if (this.value === "no") {{
+                    wrapper.style.display = "block";
+                }} else {{
+                    wrapper.style.display = "none";
+                }}
+            }});
+            document.getElementById("controlnet_source").addEventListener("change", function() {{
+                const existingWrapper = document.getElementById("existingControlnetWrapper");
+                if (this.value === "existing") {{
+                    existingWrapper.style.display = "block";
+                }} else {{
+                    existingWrapper.style.display = "none";
+                }}
+                }});
             // Show/hide prompt input if a validation image is uploaded
             document.getElementById("validationImage").addEventListener("change", function () {{
                 const wrapper = document.getElementById("promptWrapper");
@@ -1074,13 +1078,17 @@ def training():
                 }}
             }});
     
-            document.getElementById("controlnetSource").addEventListener("change", function() {{
-                const existingWrapper = document.getElementById("existingControlnetWrapper");
-                if (this.value === "existing") {{
-                    existingWrapper.style.display = "block";
-                }} else {{
-                    existingWrapper.style.display = "none";
-                }}
+            document.getElementById("N4").addEventListener("change", function() {{
+              const n4Select = document.getElementById("N4");
+              const mpSelect = document.getElementById("mixed_precision");
+              const mpGroup = document.getElementById("mixed_precision_group");
+            
+            if (n4Select.value.toLowerCase() === "true") {{
+              mpGroup.style.display = "none";
+            }} else {{
+              mpGroup.style.display = "block";
+            }}
+    
             }});
             
             document.addEventListener("DOMContentLoaded", function() {{
@@ -1088,16 +1096,12 @@ def training():
               const mpSelect = document.getElementById("mixed_precision");
               const mpGroup = document.getElementById("mixed_precision_group");
             
-              function toggleMixedPrecision() {{
-                if (n4Select.value.toLowerCase() === "true") {{
-                  mpGroup.style.display = "none";
-                }} else {{
-                  mpGroup.style.display = "block";
-                }}
-              }}
-            
-              n4Select.addEventListener("change", toggleMixedPrecision);
-              toggleMixedPrecision(); // run once on page load
+            if (n4Select.value.toLowerCase() === "true") {{
+              mpGroup.style.display = "none";
+            }} else {{
+              mpGroup.style.display = "block";
+            }}
+    
             }});
             """),
         method="post",
@@ -1179,14 +1183,14 @@ def results():
             pass
         resized_url = f"{url}?w=512&h=512&c=fit"
         if not (control_img_tag or params_text or prompt_text):
-            grid = Div(Div(Img(src=resized_url, cls="card-img"), class_="grid-item full"), class_="result-grid")
+            grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
         else:
             grid = Div(
-                Div(Img(src=resized_url, cls="card-img"), class_="grid-item"),
-                Div(control_img_tag, class_="grid-item") if control_img_tag else Div("", class_="grid-item"),
-                Div(Pre(params_text), class_="grid-item") if params_text else Div("", class_="grid-item"),
-                Div(prompt_text, class_="grid-item") if prompt_text else Div("", class_="grid-item"),
-                class_="result-grid"
+                Div(Img(src=resized_url, cls="card-img"), cls="grid-item"),
+                Div(control_img_tag, cls="grid-item") if control_img_tag else Div("", cls="grid-item"),
+                Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
+                Div(prompt_text, cls="grid-item") if prompt_text else Div("", cls="grid-item"),
+                cls="result-grid"
             )
         grids.append(grid)
 
