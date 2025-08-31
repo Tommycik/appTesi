@@ -561,7 +561,7 @@ def inference():
             flash(f"Repo {model_chosen} non valido, uso modello di default {default_canny}", "error")
         params = model_info(model_id)
         model_type = params.get("controlnet_type", "canny")
-        n4 = params.get("N4", False)
+        n4 = params.get("N4", "False")
         precision = params.get("mixed_precision", "fp16")  # todo aggiungere questo controllo
         control_image_path = None
         remote_control_path = None
@@ -593,10 +593,12 @@ def inference():
             f"-e CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} "
             f"controlnet python3 /workspace/tesiControlNetFlux/Src/scripts/controlnet_infer_api.py "
             f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} "
-            f"--controlnet_model {model_id} --N4 {n4} --controlnet_type {model_type}"
+            f"--controlnet_model {model_id} --controlnet_type {model_type}"
         )
         if remote_control_path:
             command += f" --control_image {remote_control_path} "
+        if n4.lower() == "true":
+            command += f" --N4"
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
 
@@ -895,7 +897,7 @@ def training():
             validation_steps = request.form["validation_steps"]
 
         mixed_precision = None
-        if str(n4).lower() in ["true", "yes", "1"]:
+        if n4.lower() in ["true", "yes", "1"]:
             # Force disable AMP if N4 is enabled
             mixed_precision = "no"
         else:
@@ -927,9 +929,10 @@ def training():
             f"--hub_model_id {shlex.quote(hub_model_id)}",
             f"--controlnet_model {shlex.quote(controlnet_model)}",
             f"--controlnet_type {shlex.quote(controlnet_type)}",
-            f"--N4 {str(bool(n4)).lower()}",
             f"--train_batch_size {shlex.quote(str(train_batch_size))}",
         ]
+        if n4.lower() == "true":
+            cmd.append(f"--N4")
         if resolution:
             cmd.append(f"--resolution {shlex.quote(str(resolution))}")
         if validation_steps:

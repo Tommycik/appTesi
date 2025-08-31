@@ -160,7 +160,7 @@
       <workItem from="1756404632845" duration="6155000" />
       <workItem from="1756557841145" duration="13774000" />
       <workItem from="1756647071051" duration="14707000" />
-      <workItem from="1756664421414" duration="1267000" />
+      <workItem from="1756664421414" duration="2368000" />
     </task>
     <task id="LOCAL-00001" summary="flask app">
       <option name="closed" value="true" />
@@ -514,7 +514,15 @@
       <option name="project" value="LOCAL" />
       <updated>1756664397275</updated>
     </task>
-    <option name="localTasksCounter" value="45" />
+    <task id="LOCAL-00045" summary="miglioramento css e results">
+      <option name="closed" value="true" />
+      <created>1756665810761</created>
+      <option name="number" value="00045" />
+      <option name="presentableId" value="LOCAL-00045" />
+      <option name="project" value="LOCAL" />
+      <updated>1756665810761</updated>
+    </task>
+    <option name="localTasksCounter" value="46" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
