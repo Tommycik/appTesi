@@ -433,7 +433,35 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             Header(H1("ControlNet App", cls="site-title"), navigation),
             Main(Div(content, id="main_div", cls="container")),
             Footer(P("© 2025 Lambda ControlNet App")),
-            *scripts
+            *scripts,
+            #todo navtoggle per menu mobile
+            Script("""
+                document.addEventListener("DOMContentLoaded", () => {
+                  const nav = document.querySelector(".nav");
+                  const toggle = document.getElementById("navToggle");
+                  if (toggle && nav){
+                    toggle.addEventListener("click", () => nav.classList.toggle("open"));
+                  }
+            
+                  document.querySelectorAll(".messages .alert").forEach(el => {
+                    setTimeout(() => { el.style.transition = "opacity .4s"; el.style.opacity = "0"; }, 4000);
+                  });
+            
+                  document.querySelectorAll("a.button.primary, button.button.primary").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                      btn.dataset.oldText = btn.innerText;
+                      btn.innerText = "Working…";
+                      btn.setAttribute("disabled","true");
+                      setTimeout(() => { try { btn.removeAttribute("disabled"); btn.innerText = btn.dataset.oldText; } catch(e){} }, 5000);
+                    });
+                  });
+            
+                  if (location.hash){
+                    const t = document.querySelector(location.hash);
+                    if (t) t.scrollIntoView({behavior:"smooth", block:"start"});
+                  }
+                });
+            """)
         )
     )
 
@@ -763,10 +791,12 @@ def training():
         mode = request.form["mode"]
 
         controlnet_type = request.form["controlnet_type"]
+        if (controlnet_type.lower() != "canny") & (controlnet_type.lower() != "hed"):
+            flash("Unexpected type of controlnet, using Canny as default", "error")
+            controlnet_type = "canny"
         if mode == "existing":
             model_id = request.form["existing_model"]
             hub_model_id = model_id
-            params = model_info(hub_model_id)
             reuse = request.form.get("reuse_as_controlnet", "yes")
             if reuse == "yes":
                 controlnet_model = hub_model_id
@@ -933,6 +963,7 @@ def training():
             Div(  # Existing model block
                 Label("Existing Model:"),
                 Select(*options, id="existingModel", name="existing_model"),
+                Label("ControlNet Type:"), Input(id="controlnet_type", name="controlnet_type"),
                 Label("Reuse as ControlNet?"),
                 Select(Option("No", value="no"), Option("Yes", value="yes"), name="reuse_as_controlnet", id="reuse_as_controlnet"),
                 Div(
@@ -1126,16 +1157,19 @@ def results():
     # Recupera le immagini generate
     image_urls = []
     next_cursor = None
+
     try:
         if selected_model == "all":
             for m in models:
                 model_name = m["id"].split("/")[-1]
-                res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page, next_cursor=request.args.get("next_cursor"))
+                prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
+                res = resources(type="upload", prefix=prefix, max_results=per_page, next_cursor=request.args.get("next_cursor"))
                 image_urls.extend([item["secure_url"] for item in res["resources"]])
                 next_cursor = res.get("next_cursor")
         else:
             model_name = selected_model.split("/")[-1]
-            res = resources(type="upload", prefix=f"{HF_NAMESPACE}/{model_name}_results/", max_results=per_page, next_cursor=request.args.get("next_cursor"))
+            prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
+            res = resources(type="upload", prefix=prefix, max_results=per_page, next_cursor=request.args.get("next_cursor"))
             image_urls = [item["secure_url"] for item in res["resources"]]
             next_cursor = res.get("next_cursor")
     except Exception as e:
@@ -1158,9 +1192,9 @@ def results():
     )
     grids = []
     for url in image_urls:
-        base_id = url.split("/")[-1].split(".")[0]
-        control_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/image/upload/repo_control/{base_id}_control.jpg"
-        text_url = f"https://res.cloudinary.com/{CLOUDINARY_CLOUD_NAME}/raw/upload/repo_text/{base_id}_text"
+        control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
+        text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[
+                       0] + "_text"
 
         params_text, prompt_text, control_img_tag = "", "", ""
 
@@ -1198,11 +1232,11 @@ def results():
     pagination_children = []
     if page > 1:
         pagination_children.append(
-            A("⬅ Previous", href=url_for("results", model=selected_model, page=page - 1), cls="button secondary")
+            A("Previous", href=url_for("results", model=selected_model, page=page - 1), cls="button secondary")
         )
     if next_cursor:
         pagination_children.append(
-            A("Next ➡", href=url_for("results", model=selected_model, next_cursor=next_cursor), cls="button secondary")
+            A("Next", href=url_for("results", model=selected_model, next_cursor=next_cursor), cls="button secondary")
         )
     pagination = Div(*pagination_children, cls="pagination")
 
