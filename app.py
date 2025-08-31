@@ -1125,6 +1125,20 @@ def training():
                 document.getElementById("checkpointing_steps").value = selected.dataset.checkpointing_steps;
                 document.getElementById("validation_steps").value = selected.dataset.validation_steps;
             }});
+            
+            document.getElementById("existingControlnetModel").addEventListener("change", function() {{
+                const selected = this.options[this.selectedIndex];
+                document.getElementById("controlnet_type").value = selected.dataset.controlnet_type;
+                document.getElementById("N4").value = selected.dataset.n4.toString().toLowerCase();;
+                document.getElementById("steps").value = selected.dataset.steps;
+                document.getElementById("train_batch_size").value = selected.dataset.train_batch_size;
+                document.getElementById("learning_rate").value = selected.dataset.learning_rate;
+                document.getElementById("mixed_precision").value = selected.dataset.mixed_precision;
+                document.getElementById("gradient_accumulation_steps").value = selected.dataset.gradient_accumulation_steps;
+                document.getElementById("resolution").value = selected.dataset.resolution;
+                document.getElementById("checkpointing_steps").value = selected.dataset.checkpointing_steps;
+                document.getElementById("validation_steps").value = selected.dataset.validation_steps;
+            }});
             document.getElementById("reuse_as_controlnet").addEventListener("change", function() {{
                 const wrapper = document.getElementById("existingControlnetSourceWrapper");
                 if (this.value === "no") {{
@@ -1162,6 +1176,18 @@ def training():
                 }}
             }});
     
+            document.getElementById("mode").addEventListener("change", function() {{
+                const newWrapper = document.getElementById("newModelWrapper");
+                const existingWrapper = document.getElementById("existingModelWrapper");
+                if (this.value === "new") {{
+                    newWrapper.style.display = "block";
+                    existingWrapper.style.display = "none";
+                }} else {{
+                    newWrapper.style.display = "none";
+                    existingWrapper.style.display = "block";
+                }}
+            }});
+            
             document.getElementById("mode").addEventListener("change", function() {{
                 const newWrapper = document.getElementById("newModelWrapper");
                 const existingWrapper = document.getElementById("existingModelWrapper");
