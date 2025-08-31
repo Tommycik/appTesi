@@ -190,14 +190,14 @@ class SSHManager:
             err_chunks = []
             for line in iter(stdout.readline, ""):
                 out_chunks.append(line)
+            for line in iter(stderr.readline, ""):
+                err_chunks.append(line)
                 print(line, end="", flush=True)
                 match = re.search(r"Step (\d+)/(\d+)", line)
                 if match and job_id:
                     current, total = map(int, match.groups())
                     progress = int((current / total) * 100)
                     results_db[job_id] = {"status": "running", "progress": progress}
-            for line in iter(stderr.readline, ""):
-                err_chunks.append(line)
             return "".join(out_chunks), "".join(err_chunks)
 # def setup_lambda_instance():
 #     if not LAMBDA_CLOUD_API_KEY:
@@ -581,8 +581,8 @@ def inference():
                 remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.jpg"
                 scp_to_lambda(control_image_path, remote_control_path)
                 ssh_manager.run_command(
-                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/. controlnet:/workspace/tesiControlNetFlux/remote_inputs/")
-                remote_control_path = f"/workspace/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.jpg"
+                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/. controlnet:/workspace/tesiControlNetFlux/Src/remote_inputs")
+                remote_control_path = f"remote_inputs/{uuid.uuid4()}.jpg"
                 if control_image_path and os.path.exists(control_image_path):
                     os.remove(control_image_path)
         # Call Lambda via SSH
@@ -597,13 +597,16 @@ def inference():
         )
         if remote_control_path:
             command += f" --control_image {remote_control_path} "
-        if n4.lower() == "true":
+        #if n4.lower() == "true": todo rimettere
+        if n4:
             command += f" --N4"
+        print(command)
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
 
         content = Div(
             H2("Inference Job Submitted", id="job-status"),
+            P(f"Model: {model_id}"),
             P(f"Prompt: {prompt}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for result...", id="result-section"),
@@ -914,8 +917,8 @@ def training():
                 remote_validation_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}_{filename}"
                 scp_to_lambda(validation_image_path, remote_validation_path)
                 ssh_manager.run_command(
-                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/. controlnet:/workspace/tesiControlNetFlux/remote_inputs/")
-                remote_validation_path = f"/workspace/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}_{filename}"
+                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/. controlnet:/workspace/tesiControlNetFlux/Src/remote_inputs/")
+                remote_validation_path = f"/workspace/tesiControlNetFlux/Src/remote_inputs/{uuid.uuid4()}_{filename}"
                 prompt = request.form.get("prompt")  # only then get prompt
                 if validation_image_path and os.path.exists(validation_image_path):
                     os.remove(validation_image_path)
@@ -1083,7 +1086,7 @@ def training():
             Legend("Training Parameters"),
             Div(
                 Label("Learning Rate:"), Input(id="learning_rate", name="learning_rate", value="2e-6"),
-                Label("Steps:"), Input(id="steps", name="steps", type="number"),
+                Label("Steps:"), Input(id="steps", name="steps", type="number", value="500"),
                 cls="form-row"
             ),
             Div(
