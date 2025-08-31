@@ -85,6 +85,17 @@ def models_list(namespace=HF_NAMESPACE):
             print(f"Skipping {model.modelId}: {e}")
     return result
 
+def validate_model_or_fallback(model_id: str, default_model: str):
+    try:
+        files = api.list_repo_files(model_id)
+        if "config.json" in files:
+            return model_id
+        else:
+            print(f"[WARNING] Repo {model_id} non valido, uso fallback {default_model}")
+            return default_model
+    except Exception as e:
+        print(f"[ERROR] Impossibile accedere al repo {model_id}: {e}")
+        return default_model
 
 def model_info(model_id):
     try:
@@ -272,10 +283,10 @@ def connect_lambda():
     if "true" not in status.lower():
         exists, _ = ssh_manager.run_command("sudo docker ps -a --format '{{.Names}}' | grep -w controlnet || true")
         if not exists.strip():
-            log("❌ Container was not created at all.")
+            log("Container was not created at all.")
         else:
             logs, _ = ssh_manager.run_command("sudo docker logs controlnet")
-            log("❌ Container failed to start:\n" + logs)
+            log("Container failed to start:\n" + logs)
         return str(base_layout("Connect Lambda Failed", Pre("\n".join(log_lines)))), 500
 
     # Step 6: update repo
@@ -285,7 +296,7 @@ def connect_lambda():
     )
 
     session['lambda_connected'] = True
-    log("✅ Lambda is ready.")
+    log("Lambda is ready.")
 
     content = Div(
         H1("Connect Lambda Logs"),
@@ -435,32 +446,24 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts,
             #todo navtoggle per menu mobile
-            Script("""
-                document.addEventListener("DOMContentLoaded", () => {
+            Script(f"""
+                document.addEventListener("DOMContentLoaded", () => {{
                   const nav = document.querySelector(".nav");
                   const toggle = document.getElementById("navToggle");
-                  if (toggle && nav){
+                  if (toggle && nav){{
                     toggle.addEventListener("click", () => nav.classList.toggle("open"));
-                  }
+                  }}
             
-                  document.querySelectorAll(".messages .alert").forEach(el => {
-                    setTimeout(() => { el.style.transition = "opacity .4s"; el.style.opacity = "0"; }, 4000);
-                  });
+                  document.querySelectorAll(".messages .alert").forEach(el => {{
+                    setTimeout(() => {{ el.style.transition = "opacity .4s"; el.style.opacity = "0"; }}, 4000);
+                  }});
             
-                  document.querySelectorAll("a.button.primary, button.button.primary").forEach(btn => {
-                    btn.addEventListener("click", () => {
-                      btn.dataset.oldText = btn.innerText;
-                      btn.innerText = "Working…";
-                      btn.setAttribute("disabled","true");
-                      setTimeout(() => { try { btn.removeAttribute("disabled"); btn.innerText = btn.dataset.oldText; } catch(e){} }, 5000);
-                    });
-                  });
             
-                  if (location.hash){
+                  if (location.hash){{
                     const t = document.querySelector(location.hash);
-                    if (t) t.scrollIntoView({behavior:"smooth", block:"start"});
-                  }
-                });
+                    if (t) t.scrollIntoView({{behavior:"smooth", block:"start"}});
+                  }}
+                }});
             """)
         )
     )
@@ -533,7 +536,11 @@ def inference():
         scale = request.form.get('scale', 0.2)
         steps = request.form.get('steps', 50)
         guidance = request.form.get('guidance', 6.0)
-        model_id = request.form["model"]
+        model_chosen = request.form["model"]
+        default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
+        model_id = validate_model_or_fallback(model_chosen, default_canny)
+        if model_id != model_chosen:
+            flash(f"Repo {model_chosen} non valido, uso modello di default {default_canny}", "error")
         params = model_info(model_id)
         model_type = params.get("controlnet_type", "canny")
         n4 = params.get("N4", False)
@@ -576,7 +583,7 @@ def inference():
         work_queue.put({"job_id": job_id, "command": command})
 
         content = Div(
-            H2("Inference Job Submitted"),
+            H2("Inference Job Submitted", id="job-status"),
             P(f"Prompt: {prompt}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for result...", id="result-section"),
@@ -586,6 +593,7 @@ def inference():
                         const data = await res.json();
                         let resultDiv = document.getElementById("result-section");
                         if (data.status === "done") {{
+                            document.getElementById("job-status").innerText = "Inference Job Terminated";
                             if (data.output && data.output.startsWith("http")) {{
                                 resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
                             }} else {{
@@ -796,16 +804,29 @@ def training():
             controlnet_type = "canny"
         if mode == "existing":
             model_id = request.form["existing_model"]
-            hub_model_id = model_id
+            default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
+
+            hub_model_id = validate_model_or_fallback(model_id, default_canny)
+            if hub_model_id != model_id:
+                flash(f"Repo {model_id} non valido, uso modello di default {default_canny}", "error")
             reuse = request.form.get("reuse_as_controlnet", "yes")
             if reuse == "yes":
                 controlnet_model = hub_model_id
             else:
-                controlnet_source = request.form.get("controlnet_source", "canny")
+                controlnet_source = request.form.get("controlnet_source_existing", "canny")
                 if controlnet_source == "canny":
                     controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
                 elif controlnet_source == "hed":
                     controlnet_model = "Xlabs-AI/flux-controlnet-hed-diffusers"
+                elif controlnet_source == "existing":
+                    controlnet_model_tmp = request.form["existing_controlnet_model_existing"]
+                    default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
+
+                    controlnet_model = validate_model_or_fallback(controlnet_model_tmp, default_canny)
+                    if controlnet_model != controlnet_model_tmp:
+                        flash(f"Repo {controlnet_model_tmp} non valido, uso modello di default {default_canny}",
+                              "error")
+
                 else:
                     controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
 
@@ -826,7 +847,13 @@ def training():
             elif controlnet_source == "hed":
                 controlnet_model = "Xlabs-AI/flux-controlnet-hed-diffusers"
             elif controlnet_source == "existing":
-                controlnet_model = request.form["existing_controlnet_model"]
+                controlnet_model_tmp = request.form["existing_controlnet_model"]
+                default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
+
+                controlnet_model = validate_model_or_fallback(controlnet_model_tmp, default_canny)
+                if controlnet_model != controlnet_model_tmp:
+                    flash(f"Repo {controlnet_model_tmp} non valido, uso modello di default {default_canny}", "error")
+
             else:
                 controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
 
@@ -872,7 +899,8 @@ def training():
                 prompt = request.form.get("prompt")  # only then get prompt
                 if validation_image_path and os.path.exists(validation_image_path):
                     os.remove(validation_image_path)
-
+        print(hub_model_id)
+        print(controlnet_model)
         cmd = [
             f"sudo docker exec -e HUGGINGFACE_TOKEN={shlex.quote(str(HUGGINGFACE_TOKEN or ''))} "
             f"controlnet python3 /workspace/tesiControlNetFlux/Src/scripts/controlnet_training_api.py "
@@ -905,7 +933,7 @@ def training():
         work_queue.put({"job_id": job_id, "command": command})
 
         content = Div(
-            H2("Training Job Submitted"),
+            H2("Training Job Submitted", id = "job-status"),
             P(f"Model: {hub_model_id}"),
             P(f"Job ID: {job_id}"),
             Div("Waiting for training...", id="result-section"),
@@ -915,6 +943,7 @@ def training():
                         const data = await res.json();
                         let resultDiv = document.getElementById("result-section");
                         if (data.status === "done") {{
+                            document.getElementById("job-status").innerText = "Training Job Terminated";
                             window.location.href = "{url_for('inference')}";
                         }} else if (data.status === "running") {{
                             resultDiv.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p>`;
@@ -963,16 +992,23 @@ def training():
             Div(  # Existing model block
                 Label("Existing Model:"),
                 Select(*options, id="existingModel", name="existing_model"),
-                Label("ControlNet Type:"), Input(id="controlnet_type", name="controlnet_type"),
+                Label("ControlNet Type:"), Input(id="controlnet_type_existing", name="controlnet_type"),
                 Label("Reuse as ControlNet?"),
                 Select(Option("No", value="no"), Option("Yes", value="yes"), name="reuse_as_controlnet", id="reuse_as_controlnet"),
                 Div(
-                    Label("If not reusing, choose ControlNet Source:"),
+                    Label("ControlNet Source:"),
                     Select(
                         Option("Default - Canny", value="canny"),
                         Option("Default - HED", value="hed"),
-                        id="existing_controlnet_source", name="controlnet_source"
+                        Option("Use Existing", value="existing"),
+                        id="controlnet_source_existing", name="controlnet_source_existing"
                     ),
+                    Div(
+                        Label("Choose Existing ControlNet:"),
+                        Select(*options, id="existingControlnetModel_existing", name="existing_controlnet_model_existing"),
+                        id="existingControlnetWrapper_existing", style="display:none;"
+                    ),
+                    cls="form-row",
                     id="existingControlnetSourceWrapper", style="display:none;"
                 ),
 
@@ -1083,7 +1119,15 @@ def training():
                 }} else {{
                     existingWrapper.style.display = "none";
                 }}
-                }});
+            }});
+            document.getElementById("controlnet_source_existing").addEventListener("change", function() {{
+                const existingWrapper = document.getElementById("existingControlnetWrapper_existing");
+                if (this.value === "existing") {{
+                    existingWrapper.style.display = "block";
+                }} else {{
+                    existingWrapper.style.display = "none";
+                }}
+            }});    
             // Show/hide prompt input if a validation image is uploaded
             document.getElementById("validationImage").addEventListener("change", function () {{
                 const wrapper = document.getElementById("promptWrapper");
@@ -1152,28 +1196,175 @@ def results():
     models = models_list()
     selected_model = request.args.get("model", "all")
     page = int(request.args.get("page", 1))
-    per_page = 4
+    per_page = int(request.args.get("per_page", 4))
 
-    # Recupera le immagini generate
-    image_urls = []
+    # struttura session cursors: session['results_cursors'] = { model_id: { page_number: next_cursor, ... }, ... }
+    if 'results_cursors' not in session:
+        session['results_cursors'] = {}
+
+    def fetch_page(prefix, model_key, page_num, per_page, start_cursor=None, filter_repo_image=False):
+        """
+        Ritorna tuple: (items_list, next_cursor)
+        items_list: lista di resources (dizionari) limitata a per_page
+        Questo metodo gestisce la navigazione in avanti: può iterare usando next_cursor fino a raggiungere la page desiderata.
+        """
+        collected = []
+        cursor = start_cursor
+        current_page = 1
+
+        # se start_cursor fornito, assumo che corrisponda a pagina 1 (o alla posizione richiesta)
+        while True:
+            try:
+                # richiedo max_results=per_page (ogni chiamata prende al più per_page risultati)
+                res = resources(type="upload", prefix=prefix, max_results=per_page, next_cursor=cursor)
+            except Exception as e:
+                # Fall-back: ritorna vuoto
+                return [], None
+
+            # filtra se richiesto (utile per prefix generico HF_NAMESPACE/)
+            batch = res.get("resources", [])
+            if filter_repo_image:
+                batch = [r for r in batch if "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id", "")]
+            # append in ordine finché non raggiungiamo per_page
+            for r in batch:
+                collected.append(r)
+                if len(collected) >= per_page:
+                    break
+
+            next_cursor = res.get("next_cursor")
+            # se abbiamo raccolto per_page interrompiamo e restituiamo next_cursor così il client può andare avanti
+            if len(collected) >= per_page:
+                return collected[:per_page], next_cursor
+
+            # se non ci sono più risultati
+            if not next_cursor:
+                # abbiamo tutto quello che c'era (potrebbe essere meno di per_page)
+                return collected, None
+
+            # altrimenti continuiamo la richiesta con next_cursor
+            cursor = next_cursor
+            # loop - ma raramente continua più di poche iterazioni
+
+    # == Ottieni i risultati solo per la pagina corrente ==
+    image_resources = []
     next_cursor = None
+    model_key = selected_model
 
     try:
         if selected_model == "all":
-            for m in models:
-                model_name = m["id"].split("/")[-1]
-                prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
-                res = resources(type="upload", prefix=prefix, max_results=per_page, next_cursor=request.args.get("next_cursor"))
-                image_urls.extend([item["secure_url"] for item in res["resources"]])
-                next_cursor = res.get("next_cursor")
+            # prefisso generico e poi filtro per repo_image
+            prefix = f"{HF_NAMESPACE}/"
+            # vediamo se abbiamo in session un cursor già per questa pagina
+            cursors_for_model = session['results_cursors'].get(prefix, {})
+            start_cursor = None
+
+            # se page==1 e non abbiamo cursor, lasciamo start_cursor None
+            if page > 1:
+                # se abbiamo il cursor per page-1 usalo come start
+                prev_cursor = cursors_for_model.get(str(page-1))
+                if prev_cursor:
+                    start_cursor = prev_cursor
+                else:
+                    # fallback: iteriamo dalla pagina 1 arrivando a page-1 (sono poche chiamate)
+                    start_cursor = None
+
+            items, next_cursor = fetch_page(prefix, prefix, page, per_page, start_cursor=start_cursor, filter_repo_image=True)
+            image_resources = items
+
+            # salva cursor per questa page (se non nullo)
+            if prefix not in session['results_cursors']:
+                session['results_cursors'][prefix] = {}
+            session['results_cursors'][prefix][str(page)] = next_cursor
+
         else:
+            # specific model
             model_name = selected_model.split("/")[-1]
             prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
-            res = resources(type="upload", prefix=prefix, max_results=per_page, next_cursor=request.args.get("next_cursor"))
-            image_urls = [item["secure_url"] for item in res["resources"]]
-            next_cursor = res.get("next_cursor")
+            cursors_for_model = session['results_cursors'].get(prefix, {})
+            start_cursor = None
+            if page > 1:
+                prev_cursor = cursors_for_model.get(str(page-1))
+                if prev_cursor:
+                    start_cursor = prev_cursor
+                else:
+                    start_cursor = None
+
+            items, next_cursor = fetch_page(prefix, prefix, page, per_page, start_cursor=start_cursor, filter_repo_image=False)
+            image_resources = items
+
+            if prefix not in session['results_cursors']:
+                session['results_cursors'][prefix] = {}
+            session['results_cursors'][prefix][str(page)] = next_cursor
+
+        # costruisci le card dalla singola page ONLY
+        grids = []
+        for r in image_resources:
+            url = r.get("secure_url")
+            # costruiamo control e text URL basandoci sulla stessa struttura
+            control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
+            # per i raw text Cloudinary spesso mette raw/upload; proviamo a costruire l'url raw sostituendo /image/upload/ con /raw/upload/
+            text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[0] + "_text"
+
+            params_text, prompt_text, control_img_tag = "", "", None
+
+            # fetch only the text for the current items
+            try:
+                resp = requests.get(text_url, timeout=5)
+                if resp.status_code == 200:
+                    params_text = resp.text
+                    for line in params_text.splitlines():
+                        if line.lower().startswith("prompt:"):
+                            prompt_text = line
+            except Exception:
+                params_text = ""
+
+            # test control image existence HEAD
+            try:
+                h = requests.head(control_url, timeout=4)
+                if h.status_code == 200:
+                    control_img_tag = Img(src=control_url, cls="card-img")
+            except Exception:
+                control_img_tag = None
+
+            resized_url = f"{url}?w=512&h=512&c=fit"
+
+            if not (control_img_tag or params_text or prompt_text):
+                grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
+            else:
+                grid = Div(
+                    Div(Img(src=resized_url, cls="card-img"), cls="grid-item"),
+                    Div(control_img_tag or "", cls="grid-item"),
+                    Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
+                    Div(prompt_text or "", cls="grid-item") if prompt_text else Div("", cls="grid-item"),
+                    cls="result-grid"
+                )
+
+            grids.append(grid)
+
     except Exception as e:
         flash(f"Error fetching results: {e}", "error")
+        grids = []
+
+    # Paginazione: Previous e Next
+    pagination_children = []
+    prev_link = None
+    next_link = None
+
+    # costruisci previous utilizzando i cursors salvati (se esistono)
+    prefix_key = (f"{HF_NAMESPACE}/{selected_model.split('/')[-1]}_results/repo_image/") if selected_model != "all" else f"{HF_NAMESPACE}/"
+    cursors_for_model = session['results_cursors'].get(prefix_key, {})
+
+    if page > 1:
+        # se abbiamo il cursor per page-1 allora il link Previous può includerlo (in query string fetch via page-1)
+        prev_link = url_for("results", model=selected_model, page=page-1, per_page=per_page)
+        pagination_children.append(A("⬅ Previous", href=prev_link, cls="button secondary"))
+
+    # Next: se next_cursor esiste per questa page
+    if next_cursor:
+        next_link = url_for("results", model=selected_model, page=page+1, per_page=per_page, next_cursor=next_cursor)
+        pagination_children.append(A("Next ➡", href=next_link, cls="button secondary"))
+
+    pagination = Div(*pagination_children, cls="pagination")
 
     # Selettore modello
     model_options = [Option("All Models", value="all", selected=(selected_model == "all"))]
@@ -1190,57 +1381,7 @@ def results():
         method="get",
         style="width:100%; margin-bottom:1rem;"
     )
-    grids = []
-    for url in image_urls:
-        control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
-        text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[
-                       0] + "_text"
 
-        params_text, prompt_text, control_img_tag = "", "", ""
-
-        # Try to fetch metadata
-        try:
-            resp = requests.get(text_url)
-            if resp.status_code == 200:
-                params_text = resp.text
-                for line in params_text.splitlines():
-                    if line.lower().startswith("prompt:"):
-                        prompt_text = line
-        except:
-            pass
-
-        # Try to fetch control image
-        try:
-            if requests.head(control_url).status_code == 200:
-                control_img_tag = Img(src=control_url, cls="card-img")
-        except:
-            pass
-        resized_url = f"{url}?w=512&h=512&c=fit"
-        if not (control_img_tag or params_text or prompt_text):
-            grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
-        else:
-            grid = Div(
-                Div(Img(src=resized_url, cls="card-img"), cls="grid-item"),
-                Div(control_img_tag, cls="grid-item") if control_img_tag else Div("", cls="grid-item"),
-                Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
-                Div(prompt_text, cls="grid-item") if prompt_text else Div("", cls="grid-item"),
-                cls="result-grid"
-            )
-        grids.append(grid)
-
-    # Paginazione
-    pagination_children = []
-    if page > 1:
-        pagination_children.append(
-            A("Previous", href=url_for("results", model=selected_model, page=page - 1), cls="button secondary")
-        )
-    if next_cursor:
-        pagination_children.append(
-            A("Next", href=url_for("results", model=selected_model, next_cursor=next_cursor), cls="button secondary")
-        )
-    pagination = Div(*pagination_children, cls="pagination")
-
-    # Layout finale
     content = Div(
         H1("Model Results", cls="hero-title"),
         selector,
