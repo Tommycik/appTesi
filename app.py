@@ -180,7 +180,25 @@ class SSHManager:
                 err_chunks.append(line)
             return "".join(out_chunks), "".join(err_chunks)
 
-
+    def run_command_streaming(self, command, job_id=None):
+        with self.lock:
+            self.reconnect_if_needed()
+            if not self.client:
+                return None, "SSH client not connected"
+            stdin, stdout, stderr = self.client.exec_command(command)
+            out_chunks = []
+            err_chunks = []
+            for line in iter(stdout.readline, ""):
+                out_chunks.append(line)
+                print(line, end="", flush=True)
+                match = re.search(r"Step (\d+)/(\d+)", line)
+                if match and job_id:
+                    current, total = map(int, match.groups())
+                    progress = int((current / total) * 100)
+                    results_db[job_id] = {"status": "running", "progress": progress}
+            for line in iter(stderr.readline, ""):
+                err_chunks.append(line)
+            return "".join(out_chunks), "".join(err_chunks)
 # def setup_lambda_instance():
 #     if not LAMBDA_CLOUD_API_KEY:
 #         app.logger.error("Lambda API key is not configured — skipping setup.")
@@ -327,7 +345,7 @@ def worker():
                     f"sudo docker run -d --gpus all --name controlnet "
                     f"--entrypoint python3 {DOCKER_IMAGE_NAME} -c \"import time; time.sleep(1e9)\""
                 )
-            output, errors = ssh_manager.run_command(command)
+            output, errors = ssh_manager.run_command_streaming(command,job_id)
 
             print(f"[{time.ctime()}] Worker: Job {job_id} completed.")
             print("SSH OUTPUT:", output)
