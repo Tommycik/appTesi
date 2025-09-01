@@ -576,13 +576,27 @@ def inference():
             np_image = np.array(image)
             if not np.all(np_image == 0):
                 import tempfile
-                control_image_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.jpg")
+                unique_id = str(uuid.uuid4())
+                control_image_path = os.path.join(tempfile.gettempdir(), f"{unique_id}.jpg")
                 image.save(control_image_path)
-                remote_control_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}.jpg"
-                scp_to_lambda(control_image_path, remote_control_path)
+
+                # percorso host
+                remote_control_host_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{unique_id}.jpg"
+                scp_to_lambda(control_image_path, remote_control_host_path)
+
+                # copia nel container mantenendo lo stesso nome
                 ssh_manager.run_command(
-                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/. controlnet:/workspace/tesiControlNetFlux/Src/remote_inputs")
-                remote_control_path = f"remote_inputs/{uuid.uuid4()}.jpg"
+                    "sudo docker exec controlnet mkdir -p /workspace/tesiControlNetFlux/Src/remote_inputs"
+                )
+
+                # copia solo il file, con percorso preciso
+                ssh_manager.run_command(
+                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/{unique_id}.jpg "
+                    f"controlnet:/workspace/tesiControlNetFlux/Src/remote_inputs/{unique_id}.jpg"
+                )
+
+                # percorso visto dal container
+                remote_control_path = f"remote_inputs/{unique_id}.jpg"
                 if control_image_path and os.path.exists(control_image_path):
                     os.remove(control_image_path)
         # Call Lambda via SSH
@@ -911,17 +925,40 @@ def training():
         if 'validation_image' in request.files:
             val_img = request.files['validation_image']
             if val_img and val_img.filename:
+                # pulisci nome file
                 filename = secure_filename(val_img.filename)
-                validation_image_path = os.path.join(tempfile.gettempdir(), filename)
-                val_img.save(validation_image_path)
-                remote_validation_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{uuid.uuid4()}_{filename}"
-                scp_to_lambda(validation_image_path, remote_validation_path)
+
+                # salva localmente in /tmp
+                local_val_path = os.path.join(tempfile.gettempdir(), filename)
+                val_img.save(local_val_path)
+
+                # genera nome unico remoto
+                unique_id = str(uuid.uuid4())
+                remote_val_host_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{unique_id}_{filename}"
+
+                # copia su host (via scp)
+                scp_to_lambda(local_val_path, remote_val_host_path)
+
+                # assicura che la cartella esista nel container
                 ssh_manager.run_command(
-                    f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/. controlnet:/workspace/tesiControlNetFlux/Src/remote_inputs/")
-                remote_validation_path = f"/workspace/tesiControlNetFlux/Src/remote_inputs/{uuid.uuid4()}_{filename}"
-                prompt = request.form.get("prompt")  # only then get prompt
-                if validation_image_path and os.path.exists(validation_image_path):
-                    os.remove(validation_image_path)
+                    "sudo docker exec controlnet mkdir -p /workspace/tesiControlNetFlux/Src/remote_inputs"
+                )
+
+                # copia il file dentro al container con percorso preciso
+                ssh_manager.run_command(
+                    f"sudo docker cp {remote_val_host_path} "
+                    f"controlnet:/workspace/tesiControlNetFlux/Src/remote_inputs/{unique_id}_{filename}"
+                )
+
+                # path visto dallo script di training dentro al container
+                remote_validation_path = f"/workspace/tesiControlNetFlux/Src/remote_inputs/{unique_id}_{filename}"
+
+                # recupera prompt solo dopo upload
+                prompt = request.form.get("prompt")
+
+                # pulizia locale
+                if local_val_path and os.path.exists(local_val_path):
+                    os.remove(local_val_path)
         print(hub_model_id)
         print(controlnet_model)
         cmd = [
