@@ -7,7 +7,8 @@ import uuid
 from io import BytesIO
 from typing import Any
 from scp import SCPClient
-
+import json, re
+from collections import defaultdict
 import os
 import cloudinary
 import cv2
@@ -20,7 +21,7 @@ from PIL import Image
 from cloudinary.api import resources
 from dotenv import load_dotenv
 from fasthtml.common import *
-from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, jsonify
+from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, jsonify, Response
 from huggingface_hub import HfApi, hf_hub_download
 from werkzeug.utils import secure_filename
 
@@ -54,9 +55,20 @@ load_dotenv()
 work_queue = queue.Queue()
 # Dictionary to store results, keyed by a unique job ID
 results_db = {}
+job_queues = defaultdict(queue.Queue)   # in-memory per-job queues to push events to browser
+results_lock = threading.Lock()
 # A lock to serialize the SSH command
 worker_lock = threading.Lock()
 
+def publish(job_id: str, payload: dict):
+    """Save payload to results_db and push it to job queue for SSE consumers."""
+    with results_lock:
+        results_db[job_id] = payload
+    try:
+        job_queues[job_id].put_nowait(payload)
+    except Exception:
+        # if queue full or consumer gone, ignore
+        pass
 
 def convert_to_canny(input_path):
     img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
@@ -180,77 +192,75 @@ class SSHManager:
                 err_chunks.append(line)
             return "".join(out_chunks), "".join(err_chunks)
 
-    def run_command_streaming(self, command, job_id=None):
+    def run_command_streaming(self, command, job_id=None, timeout=None):
+
         with self.lock:
             self.reconnect_if_needed()
             if not self.client:
-                return None, "SSH client not connected"
-            stdin, stdout, stderr = self.client.exec_command(command)
-            out_chunks = []
-            err_chunks = []
-            for line in iter(stdout.readline, ""):
-                out_chunks.append(line)
-            for line in iter(stderr.readline, ""):
-                err_chunks.append(line)
-                print(line, end="", flush=True)
-                match = re.search(r"Step (\d+)/(\d+)", line)
-                if match and job_id:
-                    current, total = map(int, match.groups())
-                    progress = int((current / total) * 100)
-                    results_db[job_id] = {"status": "running", "progress": progress}
-            return "".join(out_chunks), "".join(err_chunks)
-# def setup_lambda_instance():
-#     if not LAMBDA_CLOUD_API_KEY:
-#         app.logger.error("Lambda API key is not configured — skipping setup.")
-#         return
-#
-#     instance_data = get_lambda_info()
-#     if not instance_data or instance_data.get("status") != "active":
-#         app.logger.error("Lambda instance is not active — skipping setup.")
-#         return
-#
-#     # Check if image exists remotely
-#     check_image_cmd = f"sudo docker images -q {DOCKER_IMAGE_NAME}"
-#     image_id, _ = ssh_manager.run_command(check_image_cmd)
-#
-#     if not image_id.strip():
-#         app.logger.info(f"Pulling Docker image {DOCKER_IMAGE_NAME} on Lambda...")
-#         ssh_manager.run_command(f"sudo docker pull {DOCKER_IMAGE_NAME}")
-#     else:
-#         app.logger.info(f"Image {DOCKER_IMAGE_NAME} already present on Lambda — skipping pull.")
-#
-#     # Stop & remove any existing container
-#     ssh_manager.run_command("sudo docker stop controlnet || true")
-#     ssh_manager.run_command("sudo docker rm controlnet || true")
-#
-#     # Start the container (ensure Python is available in the image!)
-#     run_cmd = f"""
-#         sudo docker run -d --gpus all \
-#             --name controlnet \
-#             {DOCKER_IMAGE_NAME} sleep infinity
-#     """
-#     stdout, stderr = ssh_manager.run_command(run_cmd)
-#     if stderr:
-#         app.logger.error(f"Error starting container: {stderr}")
-#
-#     # Update repo inside the container
-#     update_repo_cmd = """
-#         sudo docker exec controlnet bash -c '
-#             cd /workspace/tesiControlNetFlux &&
-#             git reset --hard &&
-#             git pull origin main
-#         '
-#     """
-#     ssh_manager.run_command(update_repo_cmd)
-#     app.logger.info("Lambda container is ready.")
-#
-#
-# def run_setup_in_context():
-#     with app.app_context():
-#         setup_lambda_instance()
-#
-# # Start a background thread so app boot isn't blocked
-# threading.Thread(target=run_setup_in_context, daemon=True).start()
+                return "", "SSH client not connected"
+
+            transport = self.client.get_transport()
+            chan = transport.open_session()
+            chan.get_pty()  # ask for a pty so remote Python flushes more often
+            chan.exec_command(command)
+            chan.settimeout(0.5)
+
+            output_chunks = []
+            buf = ""
+            try:
+                while True:
+                    if chan.recv_ready():
+                        chunk = chan.recv(4096).decode("utf-8", errors="ignore")
+                        output_chunks.append(chunk)
+                        buf += chunk
+                        # process full lines
+                        while "\n" in buf:
+                            line, buf = buf.split("\n", 1)
+                            # publish every line as a message (so browser gets logs)
+                            if job_id:
+                                print(line)
+                                # progress pattern: Step 123/1000 or Step 1/10
+                                match = re.search(r"Step (\d+)/(\d+)",  line, re.IGNORECASE)
+                                if match:
+                                    current, total = map(int, match.groups())
+                                    progress = int((current / total) * 100)
+                                    publish(job_id, {"status": "running", "progress": progress, "message": line})
+                                    print("running")
+                    # if command finished and no more data, break
+                    if chan.exit_status_ready() and not chan.recv_ready():
+                        break
+                    time.sleep(0.05)
+            except Exception as e:
+                # timeouts/other IO errors are handled; gather what we have
+                pass
+
+            exit_code = chan.recv_exit_status()
+            output = "".join(output_chunks)
+            errors = "" if exit_code == 0 else f"exit {exit_code}"
+            print(output)
+            return output, errors
+
+def as_str(v, default=""):
+    if isinstance(v, bool): return "True" if v else "False"
+    return str(v if v is not None else default)
+
+@app.route("/events/<job_id>")
+def sse_events(job_id):
+    def stream():
+        # send current state if available
+        current = results_db.get(job_id)
+        if current:
+            yield f"data: {json.dumps(current)}\n\n"
+        q = job_queues[job_id]
+        while True:
+            # blocks until new message is available
+            payload = q.get()
+            try:
+                yield f"data: {json.dumps(payload)}\n\n"
+            except GeneratorExit:
+                break
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}  # help avoid buffering
+    return Response(stream(), mimetype="text/event-stream", headers=headers)
 
 @app.route('/connect_lambda')
 def connect_lambda():
@@ -330,12 +340,13 @@ def worker():
         job = work_queue.get()
         if job is None:
             break
-
         job_id = job['job_id']
+        publish(job_id, {"status": "running", "progress": 0})
         command = job['command']
 
         try:
             print(f"[{time.ctime()}] Worker: Starting job {job_id}")
+            # ensure container is running (unchanged from your current code)
             status_cmd = "sudo docker inspect -f '{{.State.Running}}' controlnet 2>/dev/null || echo false"
             out, _ = ssh_manager.run_command(status_cmd)
             if "true" not in out.lower():
@@ -345,38 +356,30 @@ def worker():
                     f"sudo docker run -d --gpus all --name controlnet "
                     f"--entrypoint python3 {DOCKER_IMAGE_NAME} -c \"import time; time.sleep(1e9)\""
                 )
-            output, errors = ssh_manager.run_command_streaming(command,job_id)
 
-            print(f"[{time.ctime()}] Worker: Job {job_id} completed.")
-            print("SSH OUTPUT:", output)
-            print("SSH ERRORS:", errors)
+            start_time = time.time()
+            publish(job_id, {"status": "running", "progress": 0, "started": start_time})
 
-            result_url = None
+            # streaming will publish intermediate lines/progress
+            output, errors = ssh_manager.run_command_streaming(command, job_id)
+
+            elapsed = int(time.time() - start_time)
+            # try to detect a final URL in the collected output
             url_match = re.search(r'(https?://\S+)', output)
+            finished_match = re.search(r"_complete\b", output, re.IGNORECASE)
             if url_match:
-                result_url = url_match.group(0)
-
-            if result_url:
-                print("done")
-                results_db[job_id] = {"status": "done", "output": result_url}
-            elif "Step" in output and not re.search(r"_complete\b", output, re.IGNORECASE):
-                # training log: parse progress
-                match = re.search(r"Step (\d+)/(\d+)", output)
-                if match:
-                    current, total = map(int, match.groups())
-                    progress = int((current / total) * 100)
-                    results_db[job_id] = {"status": "running", "progress": progress}
-                else:
-                    results_db[job_id] = {"status": "running", "message": output[-500:]}
-
+                publish(job_id, {"status": "done", "output": url_match.group(0), "elapsed": elapsed})
+            elif finished_match:
+                publish(job_id, {"status": "done", "message": "done", "elapsed": elapsed})
             elif errors:
-                results_db[job_id] = {"status": "error", "message": errors}
+                publish(job_id, {"status": "error", "message": errors, "elapsed": elapsed})
             else:
-                results_db[job_id] = {"status": "done", "output": "done"}
+                # maybe the job printed nothing but finished
+                publish(job_id, {"status": "done", "output": output or "done", "elapsed": elapsed})
 
         except Exception as e:
             print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
-            results_db[job_id] = {"status": "error", "message": str(e)}
+            publish(job_id, {"status": "error", "message": str(e)})
         finally:
             work_queue.task_done()
 
@@ -455,11 +458,11 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
         Head(
             Meta(charset="UTF-8"),
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
-            Title(f"ControlNet App - {title}"),
+            Title(f"Flux Designer - {title}"),
             Link(rel="stylesheet", href=url_for('static', filename='css/style.css', v=cache_buster))
         ),
         Body(
-            Header(H1("ControlNet App", cls="site-title"), navigation),
+            Header(H1("Flux Designer", cls="site-title"), navigation),
             Main(Div(content, id="main_div", cls="container")),
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts,
@@ -561,7 +564,7 @@ def inference():
             flash(f"Repo {model_chosen} non valido, uso modello di default {default_canny}", "error")
         params = model_info(model_id)
         model_type = params.get("controlnet_type", "canny")
-        n4 = params.get("N4", "False")
+        n4 = params.get("N4", False)
         precision = params.get("mixed_precision", "fp16")  # todo aggiungere questo controllo
         control_image_path = None
         remote_control_path = None
@@ -601,17 +604,17 @@ def inference():
                     os.remove(control_image_path)
         # Call Lambda via SSH
         command = (
-            f"sudo docker exec -e CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
+            f"sudo docker exec -e PYTHONUNBUFFERED=1 "
+            f"-e CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
             f"-e HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
             f"-e CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
             f"-e CLOUDINARY_API_SECRET={CLOUDINARY_API_SECRET} "
-            f"controlnet python3 /workspace/tesiControlNetFlux/Src/scripts/controlnet_infer_api.py "
+            f"controlnet python3 -u /workspace/tesiControlNetFlux/Src/scripts/controlnet_infer_api.py "
             f"--prompt \"{prompt}\" --scale {scale} --steps {steps} --guidance {guidance} "
             f"--controlnet_model {model_id} --controlnet_type {model_type}"
         )
         if remote_control_path:
             command += f" --control_image {remote_control_path} "
-        #if n4.lower() == "true": todo rimettere
         if n4:
             command += f" --N4"
         print(command)
@@ -623,28 +626,34 @@ def inference():
             P(f"Model: {model_id}"),
             P(f"Prompt: {prompt}"),
             P(f"Job ID: {job_id}"),
+            P(f"Elapsed time", style="display:none;", id="time"),
             Div("Waiting for result...", id="result-section"),
             Script(f"""
-                    async function pollResult() {{
-                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
-                        const data = await res.json();
-                        let resultDiv = document.getElementById("result-section");
-                        if (data.status === "done") {{
-                            document.getElementById("job-status").innerText = "Inference Job Terminated";
-                            if (data.output && data.output.startsWith("http")) {{
-                                resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width: 500px;'/>`;
-                            }} else {{
-                                resultDiv.innerHTML = "<p>" + data.output + "</p>";
-                            }}
-                        }} else if (data.status === "running") {{
-                            resultDiv.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p>`;
-                            setTimeout(pollResult, 2000);
+                const status = document.getElementById("job-status");
+                const result_div = document.getElementById("result-section");
+                const time_el = document.getElementById("time");
+                const es = new EventSource("{url_for('sse_events', job_id=job_id)}");
+                es.onmessage = (e) => {{
+                    const data = JSON.parse(e.data);
+                    if (data.status === "done") {{
+                        status.innerText = "Inference Job Terminated";
+                        if (data.output && data.output.startsWith("http")) {{
+                            result_div.innerHTML = `<img src="${{data.output}}" style='max-width:100%;height:auto;'/>`;
+                            time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
+                            time_el.style.display = "block";                     
                         }} else {{
-                            resultDiv.innerHTML = "<p>Waiting...</p>";
-                            setTimeout(pollResult, 2000);
+                            result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
+                            time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
+                            time_el.style.display = "block";    
                         }}
-                            }}
-                    pollResult();
+                        es.close();
+                    }} else if (data.status === "running") {{
+                        result_div.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p><pre>${{(data.message||'').slice(-800)}}</pre>`;
+                    }} else if (data.status === "error") {{
+                        result_div.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
+                        es.close();
+                    }}
+                }};
                     """),
             id="content")
 
@@ -962,8 +971,9 @@ def training():
         print(hub_model_id)
         print(controlnet_model)
         cmd = [
-            f"sudo docker exec -e HUGGINGFACE_TOKEN={shlex.quote(str(HUGGINGFACE_TOKEN or ''))} "
-            f"controlnet python3 /workspace/tesiControlNetFlux/Src/scripts/controlnet_training_api.py "
+            f"sudo docker exec -e PYTHONUNBUFFERED=1 "
+            f"-e HUGGINGFACE_TOKEN={shlex.quote(str(HUGGINGFACE_TOKEN or ''))} "
+            f"controlnet python3 -u /workspace/tesiControlNetFlux/Src/scripts/controlnet_training_api.py "
             f"--learning_rate {shlex.quote(str(learning_rate))}",
             f"--steps {shlex.quote(str(steps))}",
             f"--hub_model_id {shlex.quote(hub_model_id)}",
@@ -997,24 +1007,38 @@ def training():
             H2("Training Job Submitted", id = "job-status"),
             P(f"Model: {hub_model_id}"),
             P(f"Job ID: {job_id}"),
+            P(f"Elapsed time", style="display:none;", id="time"),
             Div("Waiting for training...", id="result-section"),
+            A(href=url_for('inference'),id="inference_link", cls="button primary",style="display:none;"),
             Script(f"""
-                    async function pollResult() {{
-                        const res = await fetch("{url_for('get_result', job_id=job_id)}");
-                        const data = await res.json();
-                        let resultDiv = document.getElementById("result-section");
-                        if (data.status === "done") {{
-                            document.getElementById("job-status").innerText = "Training Job Terminated";
-                            window.location.href = "{url_for('inference')}";
-                        }} else if (data.status === "running") {{
-                            resultDiv.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p>`;
-                            setTimeout(pollResult, 2000);
+            const status = document.getElementById("job-status");
+                const result_div = document.getElementById("result-section");
+                const time_el = document.getElementById("time");
+                const es = new EventSource("{url_for('sse_events', job_id=job_id)}");
+                const inference_link = document.getElementById("inference_link");
+                es.onmessage = (e) => {{
+                    const data = JSON.parse(e.data);
+                    if (data.status === "done") {{
+                        statusEl.innerText = "Training Job Terminated";
+                        if (data.output && data.output.startsWith("http")) {{
+                            resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width:100%;height:auto;'/>`;
+                            time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
+                            time_el.style.display = "block";  
+                            inference_link.style.display = "block";                   
                         }} else {{
-                            resultDiv.innerHTML = "<p>Waiting...</p>";
-                            setTimeout(pollResult, 2000);
+                            resultDiv.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
+                            time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
+                            time_el.style.display = "block";    
+                            inference_link.style.display = "block";    
                         }}
-                            }}
-                    pollResult();
+                        es.close();
+                    }} else if (data.status === "running") {{
+                        resultDiv.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p><pre>${{(data.message||'').slice(-800)}}</pre>`;
+                    }} else if (data.status === "error") {{
+                        resultDiv.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
+                        es.close();
+                    }}
+                }};
                 """),
             id="content")
         return str(base_layout("Waiting for Training", content)), 200
@@ -1030,7 +1054,7 @@ def training():
                 value=model_id,
                 **{
                     "data_controlnet_type": params.get("controlnet_type", "canny"),
-                    "data_N4": params.get("N4", "false"),
+                    "data_N4": as_str(params.get("N4", False),"False"),
                     "data_steps": params.get("steps", 1000),
                     "data_train_batch_size": params.get("train_batch_size", 2),
                     "data_learning_rate": params.get("learning_rate", "2e-6"),
@@ -1101,7 +1125,7 @@ def training():
             Div(
                 Label("Use N4 Quantization"),
                 Select(
-                    Option("No", value="false"),
+                    Option("No", value="false", selected=True),
                     Option("Yes", value="true"),
                     id="N4", name="N4"
                 ),
@@ -1152,119 +1176,102 @@ def training():
         ),
         Button("Start Training", type="submit", cls="button primary"),
         Script(f"""
-            document.getElementById("existingModel").addEventListener("change", function() {{
-                const selected = this.options[this.selectedIndex];
-                document.getElementById("controlnet_type").value = selected.dataset.controlnet_type;
-                document.getElementById("N4").value = selected.dataset.n4.toString().toLowerCase();;
-                document.getElementById("steps").value = selected.dataset.steps;
-                document.getElementById("train_batch_size").value = selected.dataset.train_batch_size;
-                document.getElementById("learning_rate").value = selected.dataset.learning_rate;
-                document.getElementById("mixed_precision").value = selected.dataset.mixed_precision;
-                document.getElementById("gradient_accumulation_steps").value = selected.dataset.gradient_accumulation_steps;
-                document.getElementById("resolution").value = selected.dataset.resolution;
-                document.getElementById("checkpointing_steps").value = selected.dataset.checkpointing_steps;
-                document.getElementById("validation_steps").value = selected.dataset.validation_steps;
-            }});
+              function fillFromSelected(selected){{
+                if(!selected) return;
+                const d = selected.dataset;
+                const n4 = (d.n4 || "false").toString().toLowerCase();
+                // write both fields (new/existing) so whichever is visible is correct
+                document.querySelectorAll("#controlnet_type, #controlnet_type_existing").forEach(el=>{{
+                  if (el) el.value = d.controlnet_type || "canny";
+                }});
+                const setVal = (id, v) => {{ const el=document.getElementById(id); if(el) el.value=v; }};
+                setVal("N4", n4);
+                setVal("steps", d.steps);
+                setVal("train_batch_size", d.train_batch_size);
+                setVal("learning_rate", d.learning_rate);
+                setVal("mixed_precision", d.mixed_precision);
+                setVal("gradient_accumulation_steps", d.gradient_accumulation_steps);
+                setVal("resolution", d.resolution);
+                setVal("checkpointing_steps", d.checkpointing_steps);
+                setVal("validation_steps", d.validation_steps);
+                // toggle MP when N4 true
+                const mpGroup = document.getElementById("mixed_precision_group");
+                if (mpGroup) mpGroup.style.display = (n4 === "true") ? "none" : "block";
+              }}
             
-            document.getElementById("existingControlnetModel").addEventListener("change", function() {{
-                const selected = this.options[this.selectedIndex];
-                document.getElementById("controlnet_type").value = selected.dataset.controlnet_type;
-                document.getElementById("N4").value = selected.dataset.n4.toString().toLowerCase();;
-                document.getElementById("steps").value = selected.dataset.steps;
-                document.getElementById("train_batch_size").value = selected.dataset.train_batch_size;
-                document.getElementById("learning_rate").value = selected.dataset.learning_rate;
-                document.getElementById("mixed_precision").value = selected.dataset.mixed_precision;
-                document.getElementById("gradient_accumulation_steps").value = selected.dataset.gradient_accumulation_steps;
-                document.getElementById("resolution").value = selected.dataset.resolution;
-                document.getElementById("checkpointing_steps").value = selected.dataset.checkpointing_steps;
-                document.getElementById("validation_steps").value = selected.dataset.validation_steps;
-            }});
-            document.getElementById("reuse_as_controlnet").addEventListener("change", function() {{
+              function toggleMode(){{
+                const mode = document.getElementById("mode").value;
+                const newWrapper = document.getElementById("newModelWrapper");
+                const existingWrapper = document.getElementById("existingModelWrapper");
+                if (mode === "new"){{ newWrapper.style.display="block"; existingWrapper.style.display="none"; }}
+                else {{ newWrapper.style.display="none"; existingWrapper.style.display="block"; }}
+              }}
+            
+              function toggleExistingControlnetSource(){{
+                const v = document.getElementById("reuse_as_controlnet").value;
                 const wrapper = document.getElementById("existingControlnetSourceWrapper");
-                if (this.value === "no") {{
-                    wrapper.style.display = "block";
-                }} else {{
-                    wrapper.style.display = "none";
-                }}
-            }});
-            document.getElementById("controlnet_source").addEventListener("change", function() {{
-                const existingWrapper = document.getElementById("existingControlnetWrapper");
-                if (this.value === "existing") {{
-                    existingWrapper.style.display = "block";
-                }} else {{
-                    existingWrapper.style.display = "none";
-                }}
-            }});
-            document.getElementById("controlnet_source_existing").addEventListener("change", function() {{
-                const existingWrapper = document.getElementById("existingControlnetWrapper_existing");
-                if (this.value === "existing") {{
-                    existingWrapper.style.display = "block";
-                }} else {{
-                    existingWrapper.style.display = "none";
-                }}
-            }});    
-            // Show/hide prompt input if a validation image is uploaded
-            document.getElementById("validationImage").addEventListener("change", function () {{
-                const wrapper = document.getElementById("promptWrapper");
+                wrapper.style.display = (v === "no") ? "block" : "none";
+              }}
                 
-                if (this.files.length > 0) {{
-                    wrapper.style.display = "block";
-                    document.getElementById("prompt").setAttribute("required", "true");
+                document.getElementById("N4").addEventListener("change", function() {{
+                  const n4Select = document.getElementById("N4");
+                  const mpSelect = document.getElementById("mixed_precision");
+                  const mpGroup = document.getElementById("mixed_precision_group");
+                
+                if (n4Select.value.toLowerCase() === "true") {{
+                  mpGroup.style.display = "none";
                 }} else {{
-                    wrapper.style.display = "none";
-                    document.getElementById("prompt").removeAttribute("required");
+                  mpGroup.style.display = "block";
                 }}
-            }});
-    
-            document.getElementById("mode").addEventListener("change", function() {{
-                const newWrapper = document.getElementById("newModelWrapper");
-                const existingWrapper = document.getElementById("existingModelWrapper");
-                if (this.value === "new") {{
-                    newWrapper.style.display = "block";
-                    existingWrapper.style.display = "none";
-                }} else {{
-                    newWrapper.style.display = "none";
-                    existingWrapper.style.display = "block";
+        
+                }});
+              function toggleExistingPicker(){{
+                const v = document.getElementById("controlnet_source_existing").value;
+                const w = document.getElementById("existingControlnetWrapper_existing");
+                w.style.display = (v === "existing") ? "block" : "none";
+              }}
+            
+              function toggleNewPicker(){{
+                const v = document.getElementById("controlnet_source").value;
+                const w = document.getElementById("existingControlnetWrapper");
+                w.style.display = (v === "existing") ? "block" : "none";
+              }}
+            
+              function togglePromptOnValidation(){{
+                const f = document.getElementById("validationImage");
+                const wrapper = document.getElementById("promptWrapper");
+                if (!f || !wrapper) return;
+                wrapper.style.display = (f.files && f.files.length>0) ? "block" : "none";
+                const inp = document.getElementById("prompt");
+                if (inp){{
+                  if (f.files && f.files.length>0) inp.setAttribute("required", "true");
+                  else inp.removeAttribute("required");
                 }}
-            }});
+              }}
             
-            document.getElementById("mode").addEventListener("change", function() {{
-                const newWrapper = document.getElementById("newModelWrapper");
-                const existingWrapper = document.getElementById("existingModelWrapper");
-                if (this.value === "new") {{
-                    newWrapper.style.display = "block";
-                    existingWrapper.style.display = "none";
-                }} else {{
-                    newWrapper.style.display = "none";
-                    existingWrapper.style.display = "block";
-                }}
-            }});
-    
-            document.getElementById("N4").addEventListener("change", function() {{
-              const n4Select = document.getElementById("N4");
-              const mpSelect = document.getElementById("mixed_precision");
-              const mpGroup = document.getElementById("mixed_precision_group");
+              // EVENT HOOKS
+              document.getElementById("existingModel").addEventListener("change", function(){{
+                fillFromSelected(this.options[this.selectedIndex]);
+              }});
+              document.getElementById("existingControlnetModel").addEventListener("change", function(){{
+                fillFromSelected(this.options[this.selectedIndex]);
+              }});
+              document.getElementById("mode").addEventListener("change", toggleMode);
+              document.getElementById("reuse_as_controlnet").addEventListener("change", toggleExistingControlnetSource);
+              document.getElementById("controlnet_source_existing").addEventListener("change", toggleExistingPicker);
+              document.getElementById("controlnet_source").addEventListener("change", toggleNewPicker);
+              document.getElementById("validationImage").addEventListener("change", togglePromptOnValidation);
             
-            if (n4Select.value.toLowerCase() === "true") {{
-              mpGroup.style.display = "none";
-            }} else {{
-              mpGroup.style.display = "block";
-            }}
-    
-            }});
-            
-            document.addEventListener("DOMContentLoaded", function() {{
-              const n4Select = document.getElementById("N4");
-              const mpSelect = document.getElementById("mixed_precision");
-              const mpGroup = document.getElementById("mixed_precision_group");
-            
-            if (n4Select.value.toLowerCase() === "true") {{
-              mpGroup.style.display = "none";
-            }} else {{
-              mpGroup.style.display = "block";
-            }}
-    
-            }});
+              // INITIALIZE ON LOAD
+              document.addEventListener("DOMContentLoaded", function(){{
+                toggleMode();
+                toggleExistingControlnetSource();
+                toggleExistingPicker();
+                toggleNewPicker();
+                togglePromptOnValidation();
+                const sel = document.getElementById("existingModel");
+                if (sel) fillFromSelected(sel.options[sel.selectedIndex]);
+              }});
             """),
         method="post",
         id="trainingForm",
@@ -1402,6 +1409,12 @@ def results():
                     for line in params_text.splitlines():
                         if line.lower().startswith("prompt:"):
                             prompt_text = line
+
+                    if params_text:
+                        params_text = "\n".join(
+                            l for l in params_text.splitlines()
+                            if not l.lower().startswith("prompt:")
+                        )
             except Exception:
                 params_text = ""
 
@@ -1489,4 +1502,4 @@ if __name__ == '__main__':
         print("WARNING: LAMBDA_CLOUD_API_KEY is not set in .env.")
     if not SSH_PRIVATE_KEY_PATH:
         print("WARNING: SSH_PRIVATE_KEY_PATH is not set in .env.")
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=True, threaded=True, host='0.0.0.0', port=5000)
