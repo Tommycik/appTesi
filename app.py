@@ -304,7 +304,7 @@ def connect_lambda():
     log("Installing extra Python packages (pyyaml, huggingface_hub)...")
     ssh_manager.run_command(
         "sudo docker exec controlnet pip install --upgrade pip && "
-        "sudo docker exec controlnet pip install pyyaml huggingface_hub"
+        "sudo docker exec controlnet pip install pyyaml huggingface_hub tqdm"
     )
     # Step 5: check running
     status, _ = ssh_manager.run_command("sudo docker inspect -f '{{.State.Running}}' controlnet || echo false")
@@ -1019,23 +1019,23 @@ def training():
                 es.onmessage = (e) => {{
                     const data = JSON.parse(e.data);
                     if (data.status === "done") {{
-                        statusEl.innerText = "Training Job Terminated";
+                        status.innerText = "Training Job Terminated";
                         if (data.output && data.output.startsWith("http")) {{
-                            resultDiv.innerHTML = `<img src="${{data.output}}" style='max-width:100%;height:auto;'/>`;
+                            result_div.innerHTML = `<img src="${{data.output}}" style='max-width:100%;height:auto;'/>`;
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";  
                             inference_link.style.display = "block";                   
                         }} else {{
-                            resultDiv.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
+                            result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";    
                             inference_link.style.display = "block";    
                         }}
                         es.close();
                     }} else if (data.status === "running") {{
-                        resultDiv.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p><pre>${{(data.message||'').slice(-800)}}</pre>`;
+                        result_div.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p><pre>${{(data.message||'').slice(-800)}}</pre>`;
                     }} else if (data.status === "error") {{
-                        resultDiv.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
+                        result_div.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
                         es.close();
                     }}
                 }};
