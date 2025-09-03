@@ -219,13 +219,13 @@ class SSHManager:
                             # publish every line as a message (so browser gets logs)
                             if job_id:
                                 print(line)
-                                # progress pattern: Step 123/1000 or Step 1/10
-                                match = re.search(r"Step (\d+)/(\d+)",  line, re.IGNORECASE)
+                                last_progress = -1
+                                match = re.search(r"(?:Steps:\s*)?(\d+)%", line, re.IGNORECASE)
                                 if match:
-                                    current, total = map(int, match.groups())
-                                    progress = int((current / total) * 100)
-                                    publish(job_id, {"status": "running", "progress": progress, "message": line})
-                                    print("running")
+                                    if percent != last_progress:
+                                        percent = int(match.group(1))
+                                        publish(job_id, {"status": "running", "progress": percent, "message": line})
+                                        print("running")
                     # if command finished and no more data, break
                     if chan.exit_status_ready() and not chan.recv_ready():
                         break
@@ -237,7 +237,6 @@ class SSHManager:
             exit_code = chan.recv_exit_status()
             output = "".join(output_chunks)
             errors = "" if exit_code == 0 else f"exit {exit_code}"
-            print(output)
             return output, errors
 
 def as_str(v, default=""):
@@ -463,17 +462,10 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
         ),
         Body(
             Header(H1("Flux Designer", cls="site-title"), navigation),
-            Main(Div(content, id="main_div", cls="container")),
+            Main(Div(flash_html_messages(), content, id="main_div", cls="container")),
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts,
-            #todo navtoggle per menu mobile
             Script(f"""
-                document.addEventListener("DOMContentLoaded", () => {{
-                  const nav = document.querySelector(".nav");
-                  const toggle = document.getElementById("navToggle");
-                  if (toggle && nav){{
-                    toggle.addEventListener("click", () => nav.classList.toggle("open"));
-                  }}
             
                   document.querySelectorAll(".messages .alert").forEach(el => {{
                     setTimeout(() => {{ el.style.transition = "opacity .4s"; el.style.opacity = "0"; }}, 4000);
@@ -533,8 +525,7 @@ def index():
         ),
         Hr(),
         action_section,
-        flash_html_messages()
-        , id="content", class_="container")
+        id="content", class_="container")
 
     return str(base_layout("Home", content)), 200
 
@@ -546,17 +537,53 @@ def get_result(job_id):
         return jsonify({"status": "waiting"}), 200
     return jsonify(result), 200
 
+def coalesce_str(v, default):
+    if v is None:
+        return default
+    s = str(v).strip()
+    if s == "" or s.lower() in {"undefined", "nan", "none"}:
+        return default
+    return s
 
+def coalesce_int(v, default, min_value=None, max_value=None):
+    try:
+        x = int(float(v))
+        if min_value is not None:
+            x = max(min_value, x)
+        if max_value is not None:
+            x = min(max_value, x)
+        return x
+    except Exception:
+        return default
+
+def coalesce_float_str(v, default):
+    s = coalesce_str(v, default)
+    try:
+        float(s)  # validate it parses
+        return s
+    except Exception:
+        return default
+
+def coalesce_float(v, default, min_value=None, max_value=None):
+    try:
+        x = float(v)
+        if min_value is not None:
+            x = max(min_value, x)
+        if max_value is not None:
+            x = min(max_value, x)
+        return x
+    except Exception:
+        return float(default)
 @app.route('/inference', methods=["GET", "POST"])
 def inference():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
         return redirect(url_for('index'))
     if request.method == "POST":
-        prompt = request.form['prompt']
-        scale = request.form.get('scale', 0.2)
-        steps = request.form.get('steps', 50)
-        guidance = request.form.get('guidance', 6.0)
+        prompt = coalesce_str(request.form.get("prompt"), "Tall glass with larger base")
+        steps = coalesce_int(request.form.get("steps"), 50, 1, 200)  # clamp 1–200
+        guidance = coalesce_float(request.form.get("guidance"), 6.0, 0.1, 50.0)
+        scale = coalesce_float(request.form.get("scale"), 0.2, 0.0, 2.0)
         model_chosen = request.form["model"]
         default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
         model_id = validate_model_or_fallback(model_chosen, default_canny)
@@ -564,9 +591,10 @@ def inference():
             flash(f"Repo {model_chosen} non valido, uso modello di default {default_canny}", "error")
         params = model_info(model_id)
         model_type = params.get("controlnet_type", "canny")
+        if (model_type or "").lower() not in {"canny", "hed"}:
+            model_type = "canny"
         n4 = params.get("N4", False)
         precision = params.get("mixed_precision", "fp16")  # todo aggiungere questo controllo
-        control_image_path = None
         remote_control_path = None
 
         image_url = request.form.get('control_image_data')
@@ -605,6 +633,8 @@ def inference():
         # Call Lambda via SSH
         command = (
             f"sudo docker exec -e PYTHONUNBUFFERED=1 "
+            f"-e TQDM_MININTERVAL=0 "
+            f"-e TQDM_MAXINTERVAL=0"
             f"-e CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
             f"-e HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
             f"-e CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
@@ -903,32 +933,30 @@ def training():
             else:
                 controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
 
-        learning_rate = request.form.get("learning_rate", "2e-6")
-        steps = request.form["steps"]
-        train_batch_size = request.form["train_batch_size"]
-        n4 = request.form["N4"]
-        gradient_accumulation_steps = None
-        if "gradient_accumulation_steps" in request.form:
-            gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
+        learning_rate = coalesce_float_str(request.form.get("learning_rate"), "2e-6")
+        steps = coalesce_int(request.form.get("steps"), 1000, 1)
+        train_batch_size = coalesce_int(request.form.get("train_batch_size"), 2, 1)
+        n4 = coalesce_str(request.form.get("N4"), "false").lower()
+        gradient_accumulation_steps = coalesce_int(request.form.get("gradient_accumulation_steps"), 1, 1)
         resolution = None
         if "resolution" in request.form:
-            resolution = request.form["resolution"]
+            resolution = coalesce_int(request.form.get("resolution"), 512, 64, 1024)
             if resolution and int(resolution) > 512:
                 resolution = 512
         checkpointing_steps = None
         if "checkpointing_steps" in request.form:
-            checkpointing_steps = request.form["checkpointing_steps"]
+            checkpointing_steps = coalesce_int(request.form.get("checkpointing_steps"), 250, 1)
         validation_steps = None
         if "validation_steps" in request.form:
-            validation_steps = request.form["validation_steps"]
+            validation_steps = coalesce_int(request.form.get("validation_steps"), 125, 1)
 
-        mixed_precision = None
+        mixed_precision = coalesce_str(request.form.get("mixed_precision"), "bf16").lower()
         if n4.lower() in ["true", "yes", "1"]:
             # Force disable AMP if N4 is enabled
             mixed_precision = "no"
         else:
-            if "mixed_precision" in request.form:
-                mixed_precision = request.form["mixed_precision"]
+            if mixed_precision not in {"no", "fp16", "bf16"}:
+                mixed_precision = "bf16"
         prompt = None
         remote_validation_path = None
         if 'validation_image' in request.files:
@@ -1053,16 +1081,16 @@ def training():
                 model_id.split("/")[-1],
                 value=model_id,
                 **{
-                    "data_controlnet_type": params.get("controlnet_type", "canny"),
-                    "data_N4": as_str(params.get("N4", False),"False"),
-                    "data_steps": params.get("steps", 1000),
-                    "data_train_batch_size": params.get("train_batch_size", 2),
-                    "data_learning_rate": params.get("learning_rate", "2e-6"),
-                    "data_mixed_precision": params.get("mixed_precision", "fp16"),
-                    "data_gradient_accumulation_steps": params.get("gradient_accumulation_steps", 1),
-                    "data_resolution": params.get("resolution", 512),
-                    "data_checkpointing_steps": params.get("checkpointing_steps", 250),
-                    "data_validation_steps": params.get("validation_steps", 125),
+                    "data-controlnet-type": str(params.get("controlnet_type", "canny")).lower(),
+                    "data-n4": str(params.get("N4", False)).lower(),
+                    "data-steps": str(params.get("steps", 1000)),
+                    "data-train-batch-size": str(params.get("train_batch_size", 2)),
+                    "data-learning-rate": str(params.get("learning_rate", "2e-6")),
+                    "data-mixed-precision": str(params.get("mixed_precision", "bf16")).lower(),
+                    "data-gradient-accumulation-steps": str(params.get("gradient_accumulation_steps", 1)),
+                    "data-resolution": str(params.get("resolution", 512)),
+                    "data-checkpointing-steps": str(params.get("checkpointing_steps", 250)),
+                    "data-validation-steps": str(params.get("validation_steps", 125)),
                 }
             )
         )
@@ -1297,47 +1325,57 @@ def results():
         session['results_cursors'] = {}
 
     def fetch_page(prefix, model_key, page_num, per_page, start_cursor=None, filter_repo_image=False):
-        """
-        Ritorna tuple: (items_list, next_cursor)
-        items_list: lista di resources (dizionari) limitata a per_page
-        Questo metodo gestisce la navigazione in avanti: può iterare usando next_cursor fino a raggiungere la page desiderata.
-        """
         collected = []
         cursor = start_cursor
-        current_page = 1
 
-        # se start_cursor fornito, assumo che corrisponda a pagina 1 (o alla posizione richiesta)
         while True:
             try:
-                # richiedo max_results=per_page (ogni chiamata prende al più per_page risultati)
                 res = resources(type="upload", prefix=prefix, max_results=per_page, next_cursor=cursor)
-            except Exception as e:
-                # Fall-back: ritorna vuoto
+            except Exception:
                 return [], None
 
-            # filtra se richiesto (utile per prefix generico HF_NAMESPACE/)
             batch = res.get("resources", [])
             if filter_repo_image:
-                batch = [r for r in batch if "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id", "")]
-            # append in ordine finché non raggiungiamo per_page
+                batch = [r for r in batch if
+                         "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id", "")]
+
             for r in batch:
-                collected.append(r)
-                if len(collected) >= per_page:
-                    break
+                if len(collected) < per_page:
+                    collected.append(r)
 
             next_cursor = res.get("next_cursor")
-            # se abbiamo raccolto per_page interrompiamo e restituiamo next_cursor così il client può andare avanti
-            if len(collected) >= per_page:
-                return collected[:per_page], next_cursor
 
-            # se non ci sono più risultati
+            # If we've filled the page, decide whether a "Next" truly exists by peeking ahead.
+            if len(collected) >= per_page:
+                if not next_cursor:
+                    return collected[:per_page], None
+
+                # Look ahead to see if at least one more filtered item exists.
+                look_cursor = next_cursor
+                while look_cursor:
+                    try:
+                        look_res = resources(type="upload", prefix=prefix, max_results=per_page,
+                                             next_cursor=look_cursor)
+                    except Exception:
+                        break
+                    look_batch = look_res.get("resources", [])
+                    if filter_repo_image:
+                        look_batch = [r for r in look_batch if
+                                      "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id",
+                                                                                                           "")]
+                    if look_batch:
+                        # There ARE more filtered items beyond this page
+                        return collected[:per_page], next_cursor
+                    look_cursor = look_res.get("next_cursor")
+                # No more filtered items
+                return collected[:per_page], None
+
+            # If this batch didn't fill the page and there's no cursor, we're out of items
             if not next_cursor:
-                # abbiamo tutto quello che c'era (potrebbe essere meno di per_page)
                 return collected, None
 
-            # altrimenti continuiamo la richiesta con next_cursor
+            # Otherwise continue fetching until either page is full or no more items
             cursor = next_cursor
-            # loop - ma raramente continua più di poche iterazioni
 
     # == Ottieni i risultati solo per la pagina corrente ==
     image_resources = []
@@ -1447,24 +1485,17 @@ def results():
 
     # Paginazione: Previous e Next
     pagination_children = []
-    prev_link = None
-    next_link = None
-
-    # costruisci previous utilizzando i cursors salvati (se esistono)
-    prefix_key = (f"{HF_NAMESPACE}/{selected_model.split('/')[-1]}_results/repo_image/") if selected_model != "all" else f"{HF_NAMESPACE}/"
-    cursors_for_model = session['results_cursors'].get(prefix_key, {})
-
     if page > 1:
-        # se abbiamo il cursor per page-1 allora il link Previous può includerlo (in query string fetch via page-1)
-        prev_link = url_for("results", model=selected_model, page=page-1, per_page=per_page)
-        pagination_children.append(A("⬅ Previous", href=prev_link, cls="button secondary"))
+        pagination_children.append(
+            A("⬅ Previous", href=url_for("results", model=selected_model, page=page - 1, per_page=per_page),
+              cls="button secondary"))
 
-    # Next: se next_cursor esiste per questa page
     if next_cursor:
-        next_link = url_for("results", model=selected_model, page=page+1, per_page=per_page, next_cursor=next_cursor)
-        pagination_children.append(A("Next ➡", href=next_link, cls="button secondary"))
+        pagination_children.append(
+            A("Next ➡", href=url_for("results", model=selected_model, page=page + 1, per_page=per_page),
+              cls="button secondary"))
 
-    pagination = Div(*pagination_children, cls="pagination")
+    pagination = Div(*pagination_children, cls="pagination") if pagination_children else ""
 
     # Selettore modello
     model_options = [Option("All Models", value="all", selected=(selected_model == "all"))]
