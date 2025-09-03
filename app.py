@@ -228,6 +228,8 @@ class SSHManager:
                                         print("running")
                     # if command finished and no more data, break
                     if chan.exit_status_ready() and not chan.recv_ready():
+                        exit_code = chan.recv_exit_status()
+                        print(f"Job {job_id} exited with code {exit_code}")
                         break
                     time.sleep(0.05)
             except Exception as e:
@@ -372,9 +374,6 @@ def worker():
                 publish(job_id, {"status": "done", "message": "done", "elapsed": elapsed})
             elif errors:
                 publish(job_id, {"status": "error", "message": errors, "elapsed": elapsed})
-            else:
-                # maybe the job printed nothing but finished
-                publish(job_id, {"status": "done", "output": output or "done", "elapsed": elapsed})
 
         except Exception as e:
             print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
@@ -518,9 +517,9 @@ def index():
         Hr(),
         H2("Getting Started"),
         Div(
-            P("Create a Lambda Cloud account & API Key."),
-            P("Upload an SSH key pair to Lambda Cloud."),
-            P(f"Start a Lambda instance with Docker installed (IP: {LAMBDA_INSTANCE_IP})."),
+            P("Ensure a lambda instance is running and that the correct IP is set."),
+            P(f"Current IP :  {LAMBDA_INSTANCE_IP}"),
+            P(f"Current Region :  {REGION}"),
             cls="points"
         ),
         Hr(),
@@ -580,10 +579,10 @@ def inference():
     if not is_connected:
         return redirect(url_for('index'))
     if request.method == "POST":
-        prompt = coalesce_str(request.form.get("prompt"), "Tall glass with larger base")
-        steps = coalesce_int(request.form.get("steps"), 50, 1, 200)  # clamp 1–200
-        guidance = coalesce_float(request.form.get("guidance"), 6.0, 0.1, 50.0)
-        scale = coalesce_float(request.form.get("scale"), 0.2, 0.0, 2.0)
+        prompt = request.form['prompt']
+        scale = request.form.get('scale', 0.2)
+        steps = request.form.get('steps', 50)
+        guidance = request.form.get('guidance', 6.0)
         model_chosen = request.form["model"]
         default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
         model_id = validate_model_or_fallback(model_chosen, default_canny)
@@ -633,8 +632,6 @@ def inference():
         # Call Lambda via SSH
         command = (
             f"sudo docker exec -e PYTHONUNBUFFERED=1 "
-            f"-e TQDM_MININTERVAL=0 "
-            f"-e TQDM_MAXINTERVAL=0"
             f"-e CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
             f"-e HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
             f"-e CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
@@ -789,7 +786,7 @@ def inference():
         enctype="multipart/form-data",
         cls="form-card",)
 
-    return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])), 200
+    return str(base_layout("Inference", form)), 200
 
 
 @app.route("/preprocess_image", methods=["POST"])
@@ -933,30 +930,32 @@ def training():
             else:
                 controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
 
-        learning_rate = coalesce_float_str(request.form.get("learning_rate"), "2e-6")
-        steps = coalesce_int(request.form.get("steps"), 1000, 1)
-        train_batch_size = coalesce_int(request.form.get("train_batch_size"), 2, 1)
-        n4 = coalesce_str(request.form.get("N4"), "false").lower()
-        gradient_accumulation_steps = coalesce_int(request.form.get("gradient_accumulation_steps"), 1, 1)
+        learning_rate = request.form.get("learning_rate", "2e-6")
+        steps = request.form["steps"]
+        train_batch_size = request.form["train_batch_size"]
+        n4 = request.form["N4"]
+        gradient_accumulation_steps = None
+        if "gradient_accumulation_steps" in request.form:
+            gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
         resolution = None
         if "resolution" in request.form:
-            resolution = coalesce_int(request.form.get("resolution"), 512, 64, 1024)
+            resolution = request.form["resolution"]
             if resolution and int(resolution) > 512:
                 resolution = 512
         checkpointing_steps = None
         if "checkpointing_steps" in request.form:
-            checkpointing_steps = coalesce_int(request.form.get("checkpointing_steps"), 250, 1)
+            checkpointing_steps = request.form["checkpointing_steps"]
         validation_steps = None
         if "validation_steps" in request.form:
-            validation_steps = coalesce_int(request.form.get("validation_steps"), 125, 1)
+            validation_steps = request.form["validation_steps"]
 
-        mixed_precision = coalesce_str(request.form.get("mixed_precision"), "bf16").lower()
+        mixed_precision = None
         if n4.lower() in ["true", "yes", "1"]:
             # Force disable AMP if N4 is enabled
             mixed_precision = "no"
         else:
-            if mixed_precision not in {"no", "fp16", "bf16"}:
-                mixed_precision = "bf16"
+            if "mixed_precision" in request.form:
+                mixed_precision = request.form["mixed_precision"]
         prompt = None
         remote_validation_path = None
         if 'validation_image' in request.files:
@@ -1081,16 +1080,16 @@ def training():
                 model_id.split("/")[-1],
                 value=model_id,
                 **{
-                    "data-controlnet-type": str(params.get("controlnet_type", "canny")).lower(),
-                    "data-n4": str(params.get("N4", False)).lower(),
-                    "data-steps": str(params.get("steps", 1000)),
-                    "data-train-batch-size": str(params.get("train_batch_size", 2)),
-                    "data-learning-rate": str(params.get("learning_rate", "2e-6")),
-                    "data-mixed-precision": str(params.get("mixed_precision", "bf16")).lower(),
-                    "data-gradient-accumulation-steps": str(params.get("gradient_accumulation_steps", 1)),
-                    "data-resolution": str(params.get("resolution", 512)),
-                    "data-checkpointing-steps": str(params.get("checkpointing_steps", 250)),
-                    "data-validation-steps": str(params.get("validation_steps", 125)),
+                    "data_controlnet_type": params.get("controlnet_type", "canny"),
+                    "data_N4": as_str(params.get("N4", False),"False"),
+                    "data_steps": params.get("steps", 1000),
+                    "data_train_batch_size": params.get("train_batch_size", 2),
+                    "data_learning_rate": params.get("learning_rate", "2e-6"),
+                    "data_mixed_precision": params.get("mixed_precision", "bf16"),
+                    "data_gradient_accumulation_steps": params.get("gradient_accumulation_steps", 1),
+                    "data_resolution": params.get("resolution", 512),
+                    "data_checkpointing_steps": params.get("checkpointing_steps", 250),
+                    "data_validation_steps": params.get("validation_steps", 125),
                 }
             )
         )
