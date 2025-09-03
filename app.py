@@ -219,13 +219,13 @@ class SSHManager:
                             # publish every line as a message (so browser gets logs)
                             if job_id:
                                 print(line)
-                                last_progress = -1
-                                match = re.search(r"(?:Steps:\s*)?(\d+)%", line, re.IGNORECASE)
+                                # progress pattern: Step 123/1000 or Step 1/10
+                                match = re.search(r"Step (\d+)/(\d+)",  line, re.IGNORECASE)
                                 if match:
-                                    if percent != last_progress:
-                                        percent = int(match.group(1))
-                                        publish(job_id, {"status": "running", "progress": percent, "message": line})
-                                        print("running")
+                                    current, total = map(int, match.groups())
+                                    progress = int((current / total) * 100)
+                                    publish(job_id, {"status": "running", "progress": progress, "message": line})
+                                    print("running")
                     # if command finished and no more data, break
                     if chan.exit_status_ready() and not chan.recv_ready():
                         exit_code = chan.recv_exit_status()
@@ -465,6 +465,12 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts,
             Script(f"""
+                document.addEventListener("DOMContentLoaded", () => {{
+                  const nav = document.querySelector(".nav");
+                  const toggle = document.getElementById("navToggle");
+                  if (toggle && nav){{
+                    toggle.addEventListener("click", () => nav.classList.toggle("open"));
+                  }}
             
                   document.querySelectorAll(".messages .alert").forEach(el => {{
                     setTimeout(() => {{ el.style.transition = "opacity .4s"; el.style.opacity = "0"; }}, 4000);
@@ -786,7 +792,7 @@ def inference():
         enctype="multipart/form-data",
         cls="form-card",)
 
-    return str(base_layout("Inference", form)), 200
+    return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])), 200
 
 
 @app.route("/preprocess_image", methods=["POST"])
