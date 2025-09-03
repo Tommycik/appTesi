@@ -605,6 +605,8 @@ def inference():
         # Call Lambda via SSH
         command = (
             f"sudo docker exec -e PYTHONUNBUFFERED=1 "
+            f"-e TQDM_MININTERVAL=0 "
+            f"-e TQDM_MAXINTERVAL=0 "
             f"-e CLOUDINARY_CLOUD_NAME={CLOUDINARY_CLOUD_NAME} "
             f"-e HUGGINGFACE_TOKEN={HUGGINGFACE_TOKEN} "
             f"-e CLOUDINARY_API_KEY={CLOUDINARY_API_KEY} "
