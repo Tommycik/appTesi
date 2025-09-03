@@ -225,35 +225,54 @@ class SSHManager:
                         if job_id:
                             # publish line
                             print(line)
-                            publish(job_id, {"status": "running", "message": line})
                             # match progress patterns
                             progress = None
                             msg = None
 
-                            # Inference-style: " 70%|...| 35/50 ..."
+                            # Inference style (plain tqdm without prefix)
                             m = re.search(r'^\s*(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                             if m:
                                 progress = int(m.group(1))
                                 msg = f"Progress: {progress}%"
 
-                            # Training-style: "Steps:  20%|...| 2/10 [...]"
+                            # Training steps
                             elif line.strip().startswith("Steps:"):
                                 m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                                 if m:
                                     progress = int(m.group(1))
                                     msg = f"Progress: {progress}%"
 
-                            # Map-style: "Map:  87%|...| 200/229 [...]"
+                            # Map evaluation
                             elif line.strip().startswith("Map:"):
                                 m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                                 if m:
                                     progress = int(m.group(1))
                                     msg = f"Map: {progress}%"
 
-                            if progress is not None and msg is not None:
+                            # Fetching files
+                            elif line.strip().startswith("Fetching"):
+                                m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
+                                if m:
+                                    progress = int(m.group(1))
+                                    msg = f"Fetching files: {progress}%"
+
+                            # Loading checkpoint shards
+                            elif line.strip().startswith("Loading checkpoint shards"):
+                                m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
+                                if m:
+                                    progress = int(m.group(1))
+                                    msg = f"Loading checkpoint: {progress}%"
+
+                            elif line.strip().startswith("Processing Files"):
+                                m = re.search(r'(\d{1,3})%\|', line)
+                                if m:
+                                    progress = int(m.group(1))
+                                    msg = f"Processing Files: {progress}%"
+
+                            if msg is not None:
                                 publish(job_id, {
                                     "status": "running",
-                                    "progress": progress,
+                                    "progress": progress if progress is not None else 0,
                                     "message": msg
                                 })
 
@@ -377,7 +396,6 @@ def worker():
         if job is None:
             break
         job_id = job['job_id']
-        publish(job_id, {"status": "running", "progress": 0})
         command = job['command']
 
         try:
