@@ -228,32 +228,33 @@ class SSHManager:
                             publish(job_id, {"status": "running", "message": line})
                             # match progress patterns
                             progress = None
+                            msg = None
 
-                            # Inference-style: " 70%| ... | 35/50 ..."
+                            # Inference-style: " 70%|...| 35/50 ..."
                             m = re.search(r'^\s*(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                             if m:
-                                pct = int(m.group(1))
-                                progress = pct
+                                progress = int(m.group(1))
+                                msg = f"Progress: {progress}%"
 
                             # Training-style: "Steps:  20%|...| 2/10 [...]"
                             elif line.strip().startswith("Steps:"):
                                 m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                                 if m:
-                                    pct = int(m.group(1))
-                                    progress = pct
+                                    progress = int(m.group(1))
+                                    msg = f"Progress: {progress}%"
 
                             # Map-style: "Map:  87%|...| 200/229 [...]"
                             elif line.strip().startswith("Map:"):
                                 m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                                 if m:
-                                    pct = int(m.group(1))
-                                    progress = pct
+                                    progress = int(m.group(1))
+                                    msg = f"Map: {progress}%"
 
-                            if progress is not None:
+                            if progress is not None and msg is not None:
                                 publish(job_id, {
                                     "status": "running",
                                     "progress": progress,
-                                    "message": f"Progress: {progress}%"
+                                    "message": msg
                                 })
 
                 if chan.recv_stderr_ready():
