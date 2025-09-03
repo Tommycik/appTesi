@@ -226,16 +226,35 @@ class SSHManager:
                             # publish line
                             print(line)
                             publish(job_id, {"status": "running", "message": line})
-                            # try some simple progress patterns
-                            m = re.search(r'(\d{1,3})%|\bStep\s+(\d+)\s*/\s*(\d+)', line)
+                            # match progress patterns
+                            progress = None
+
+                            # Inference-style: " 70%| ... | 35/50 ..."
+                            m = re.search(r'^\s*(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                             if m:
-                                if m.group(1):
-                                    pct = max(0, min(100, int(m.group(1))))
-                                else:
-                                    cur = int(m.group(2));
-                                    tot = max(1, int(m.group(3)))
-                                    pct = int(cur * 100 / tot)
-                                publish(job_id, {"status": "running", "progress": pct, "message": line})
+                                pct = int(m.group(1))
+                                progress = pct
+
+                            # Training-style: "Steps:  20%|...| 2/10 [...]"
+                            elif line.strip().startswith("Steps:"):
+                                m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
+                                if m:
+                                    pct = int(m.group(1))
+                                    progress = pct
+
+                            # Map-style: "Map:  87%|...| 200/229 [...]"
+                            elif line.strip().startswith("Map:"):
+                                m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
+                                if m:
+                                    pct = int(m.group(1))
+                                    progress = pct
+
+                            if progress is not None:
+                                publish(job_id, {
+                                    "status": "running",
+                                    "progress": progress,
+                                    "message": f"Progress: {progress}%"
+                                })
 
                 if chan.recv_stderr_ready():
                     chunk = chan.recv_stderr(4096).decode("utf-8", errors="ignore")
