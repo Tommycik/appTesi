@@ -193,7 +193,6 @@ class SSHManager:
             return "".join(out_chunks), "".join(err_chunks)
 
     def run_command_streaming(self, command, job_id=None, timeout=None):
-
         with self.lock:
             self.reconnect_if_needed()
             if not self.client:
@@ -201,43 +200,60 @@ class SSHManager:
 
             transport = self.client.get_transport()
             chan = transport.open_session()
-            chan.get_pty()  # ask for a pty so remote Python flushes more often
+            chan.get_pty()  # helps remote Python flush
             chan.exec_command(command)
-            chan.settimeout(0.5)
+            chan.settimeout(0.2)
 
-            output_chunks = []
-            buf = ""
-            try:
-                while True:
-                    if chan.recv_ready():
-                        chunk = chan.recv(4096).decode("utf-8", errors="ignore")
-                        output_chunks.append(chunk)
-                        buf += chunk
-                        # process full lines
-                        while "\n" in buf:
-                            line, buf = buf.split("\n", 1)
-                            # publish every line as a message (so browser gets logs)
-                            if job_id:
-                                print(line)
-                                # progress pattern: Step 123/1000 or Step 1/10
-                                match = re.search(r"Step (\d+)/(\d+)",  line, re.IGNORECASE)
-                                if match:
-                                    current, total = map(int, match.groups())
-                                    progress = int((current / total) * 100)
-                                    publish(job_id, {"status": "running", "progress": progress, "message": line})
-                                    print("running")
-                    # if command finished and no more data, break
-                    if chan.exit_status_ready() and not chan.recv_ready():
-                        break
-                    time.sleep(0.05)
-            except Exception as e:
-                # timeouts/other IO errors are handled; gather what we have
-                pass
+            output_chunks, error_chunks = [], []
+            buf_out, buf_err = "", ""
+
+            def emit_lines_from(buffer_text):
+                # normalize CR-only progress updates; keep the trailing partial
+                normalized = buffer_text.replace("\r\n", "\n").replace("\r", "\n")
+                parts = normalized.split("\n")
+                return parts[:-1], parts[-1]  # (full_lines, tail)
+
+            while True:
+                if chan.recv_ready():
+                    chunk = chan.recv(4096).decode("utf-8", errors="ignore")
+                    output_chunks.append(chunk)
+                    buf_out += chunk
+                    lines, buf_out = emit_lines_from(buf_out)
+                    for line in lines:
+                        if not line:
+                            continue
+                        if job_id:
+                            # publish line
+                            print(line)
+                            publish(job_id, {"status": "running", "message": line})
+                            # try some simple progress patterns
+                            m = re.search(r'(\d{1,3})%|\bStep\s+(\d+)\s*/\s*(\d+)', line)
+                            if m:
+                                if m.group(1):
+                                    pct = max(0, min(100, int(m.group(1))))
+                                else:
+                                    cur = int(m.group(2));
+                                    tot = max(1, int(m.group(3)))
+                                    pct = int(cur * 100 / tot)
+                                publish(job_id, {"status": "running", "progress": pct, "message": line})
+
+                if chan.recv_stderr_ready():
+                    chunk = chan.recv_stderr(4096).decode("utf-8", errors="ignore")
+                    error_chunks.append(chunk)
+                    buf_err += chunk  # we keep stderr buffered, not streaming to UI
+
+                if chan.exit_status_ready() and not chan.recv_ready() and not chan.recv_stderr_ready():
+                    break
+
+                time.sleep(0.05)
+
+            # publish the final CR-overwritten line (if any)
+            if buf_out.strip() and job_id:
+                publish(job_id, {"status": "running", "message": buf_out.strip()})
 
             exit_code = chan.recv_exit_status()
             output = "".join(output_chunks)
-            errors = "" if exit_code == 0 else f"exit {exit_code}"
-            print(output)
+            errors = "".join(error_chunks) if exit_code != 0 else ""
             return output, errors
 
 def as_str(v, default=""):
@@ -463,10 +479,9 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
         ),
         Body(
             Header(H1("Flux Designer", cls="site-title"), navigation),
-            Main(Div(content, id="main_div", cls="container")),
+            Main(Div(flash_html_messages(), content, id="main_div", cls="container")),
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts,
-            #todo navtoggle per menu mobile
             Script(f"""
                 document.addEventListener("DOMContentLoaded", () => {{
                   const nav = document.querySelector(".nav");
@@ -527,14 +542,13 @@ def index():
         H2("Getting Started"),
         Div(
             P("Create a Lambda Cloud account & API Key."),
-            P("Upload an SSH key pair to Lambda Cloud."),
-            P(f"Start a Lambda instance with Docker installed (IP: {LAMBDA_INSTANCE_IP})."),
+            P("Start the lambda machine and wait until it's started"),
+            P(f"Make sure the Lambda IP and region are set correctly (IP: {LAMBDA_INSTANCE_IP}, Region : {REGION})."),
             cls="points"
         ),
         Hr(),
         action_section,
-        flash_html_messages()
-        , id="content", class_="container")
+        id="content", class_="container")
 
     return str(base_layout("Home", content)), 200
 
@@ -629,7 +643,7 @@ def inference():
             P(f"Prompt: {prompt}"),
             P(f"Job ID: {job_id}"),
             P(f"Elapsed time", style="display:none;", id="time"),
-            Div("Waiting for result...", id="result-section"),
+            Div("Waiting for your turn...", id="result-section"),
             Script(f"""
                 const status = document.getElementById("job-status");
                 const result_div = document.getElementById("result-section");
@@ -1010,8 +1024,8 @@ def training():
             P(f"Model: {hub_model_id}"),
             P(f"Job ID: {job_id}"),
             P(f"Elapsed time", style="display:none;", id="time"),
-            Div("Waiting for training...", id="result-section"),
-            A(href=url_for('inference'),id="inference_link", cls="button primary",style="display:none;"),
+            Div("Waiting for your turn...", id="result-section"),
+            A("Go to Inference Page", href=url_for('inference'), id="inference_link", cls="button primary", style = "display: none; width: fit-content;"),
             Script(f"""
             const status = document.getElementById("job-status");
                 const result_div = document.getElementById("result-section");
@@ -1042,7 +1056,7 @@ def training():
                     }}
                 }};
                 """),
-            id="content")
+            id="content", cls="result")
         return str(base_layout("Waiting for Training", content)), 200
 
     models = models_list()
@@ -1179,26 +1193,31 @@ def training():
         Button("Start Training", type="submit", cls="button primary"),
         Script(f"""
               function fillFromSelected(selected){{
-                if(!selected) return;
-                const d = selected.dataset;
-                const n4 = (d.n4 || "false").toString().toLowerCase();
-                // write both fields (new/existing) so whichever is visible is correct
-                document.querySelectorAll("#controlnet_type, #controlnet_type_existing").forEach(el=>{{
-                  if (el) el.value = d.controlnet_type || "canny";
-                }});
-                const setVal = (id, v) => {{ const el=document.getElementById(id); if(el) el.value=v; }};
-                setVal("N4", n4);
-                setVal("steps", d.steps);
-                setVal("train_batch_size", d.train_batch_size);
-                setVal("learning_rate", d.learning_rate);
-                setVal("mixed_precision", d.mixed_precision);
-                setVal("gradient_accumulation_steps", d.gradient_accumulation_steps);
-                setVal("resolution", d.resolution);
-                setVal("checkpointing_steps", d.checkpointing_steps);
-                setVal("validation_steps", d.validation_steps);
-                // toggle MP when N4 true
-                const mpGroup = document.getElementById("mixed_precision_group");
-                if (mpGroup) mpGroup.style.display = (n4 === "true") ? "none" : "block";
+                  if (!selected) return;
+                  const d = selected.dataset;
+                
+                  // read attributes with camelCase (dataset auto-converts)
+                  const n4 = (d.n4 || "false").toString().toLowerCase();
+                
+                  document.querySelectorAll("#controlnet_type, #controlnet_type_existing").forEach(el=>{{
+                    if (el) el.value = d.controlnetType || "canny";
+                  }});
+                
+                  const setVal = (id, v) => {{ const el=document.getElementById(id); if(el && v !== undefined) el.value=v; }};
+                
+                  setVal("N4", n4);
+                  setVal("steps", d.steps);
+                  setVal("train_batch_size", d.trainBatchSize);
+                  setVal("learning_rate", d.learningRate);
+                  setVal("mixed_precision", d.mixedPrecision);
+                  setVal("gradient_accumulation_steps", d.gradientAccumulationSteps);
+                  setVal("resolution", d.resolution);
+                  setVal("checkpointing_steps", d.checkpointingSteps);
+                  setVal("validation_steps", d.validationSteps);
+                
+                  // toggle MP when N4 true
+                  const mpGroup = document.getElementById("mixed_precision_group");
+                  if (mpGroup) mpGroup.style.display = (n4 === "true") ? "none" : "block";
               }}
             
               function toggleMode(){{
@@ -1299,47 +1318,57 @@ def results():
         session['results_cursors'] = {}
 
     def fetch_page(prefix, model_key, page_num, per_page, start_cursor=None, filter_repo_image=False):
-        """
-        Ritorna tuple: (items_list, next_cursor)
-        items_list: lista di resources (dizionari) limitata a per_page
-        Questo metodo gestisce la navigazione in avanti: può iterare usando next_cursor fino a raggiungere la page desiderata.
-        """
         collected = []
         cursor = start_cursor
-        current_page = 1
 
-        # se start_cursor fornito, assumo che corrisponda a pagina 1 (o alla posizione richiesta)
         while True:
             try:
-                # richiedo max_results=per_page (ogni chiamata prende al più per_page risultati)
                 res = resources(type="upload", prefix=prefix, max_results=per_page, next_cursor=cursor)
-            except Exception as e:
-                # Fall-back: ritorna vuoto
+            except Exception:
                 return [], None
 
-            # filtra se richiesto (utile per prefix generico HF_NAMESPACE/)
             batch = res.get("resources", [])
             if filter_repo_image:
-                batch = [r for r in batch if "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id", "")]
-            # append in ordine finché non raggiungiamo per_page
+                batch = [r for r in batch if
+                         "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id", "")]
+
             for r in batch:
-                collected.append(r)
-                if len(collected) >= per_page:
-                    break
+                if len(collected) < per_page:
+                    collected.append(r)
 
             next_cursor = res.get("next_cursor")
-            # se abbiamo raccolto per_page interrompiamo e restituiamo next_cursor così il client può andare avanti
-            if len(collected) >= per_page:
-                return collected[:per_page], next_cursor
 
-            # se non ci sono più risultati
+            # If we've filled the page, decide whether a "Next" truly exists by peeking ahead.
+            if len(collected) >= per_page:
+                if not next_cursor:
+                    return collected[:per_page], None
+
+                # Look ahead to see if at least one more filtered item exists.
+                look_cursor = next_cursor
+                while look_cursor:
+                    try:
+                        look_res = resources(type="upload", prefix=prefix, max_results=per_page,
+                                             next_cursor=look_cursor)
+                    except Exception:
+                        break
+                    look_batch = look_res.get("resources", [])
+                    if filter_repo_image:
+                        look_batch = [r for r in look_batch if
+                                      "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id",
+                                                                                                           "")]
+                    if look_batch:
+                        # There ARE more filtered items beyond this page
+                        return collected[:per_page], next_cursor
+                    look_cursor = look_res.get("next_cursor")
+                # No more filtered items
+                return collected[:per_page], None
+
+            # If this batch didn't fill the page and there's no cursor, we're out of items
             if not next_cursor:
-                # abbiamo tutto quello che c'era (potrebbe essere meno di per_page)
                 return collected, None
 
-            # altrimenti continuiamo la richiesta con next_cursor
+            # Otherwise continue fetching until either page is full or no more items
             cursor = next_cursor
-            # loop - ma raramente continua più di poche iterazioni
 
     # == Ottieni i risultati solo per la pagina corrente ==
     image_resources = []
@@ -1449,24 +1478,17 @@ def results():
 
     # Paginazione: Previous e Next
     pagination_children = []
-    prev_link = None
-    next_link = None
-
-    # costruisci previous utilizzando i cursors salvati (se esistono)
-    prefix_key = (f"{HF_NAMESPACE}/{selected_model.split('/')[-1]}_results/repo_image/") if selected_model != "all" else f"{HF_NAMESPACE}/"
-    cursors_for_model = session['results_cursors'].get(prefix_key, {})
-
     if page > 1:
-        # se abbiamo il cursor per page-1 allora il link Previous può includerlo (in query string fetch via page-1)
-        prev_link = url_for("results", model=selected_model, page=page-1, per_page=per_page)
-        pagination_children.append(A("⬅ Previous", href=prev_link, cls="button secondary"))
+        pagination_children.append(
+            A("⬅ Previous", href=url_for("results", model=selected_model, page=page - 1, per_page=per_page),
+              cls="button secondary"))
 
-    # Next: se next_cursor esiste per questa page
     if next_cursor:
-        next_link = url_for("results", model=selected_model, page=page+1, per_page=per_page, next_cursor=next_cursor)
-        pagination_children.append(A("Next ➡", href=next_link, cls="button secondary"))
+        pagination_children.append(
+            A("Next ➡", href=url_for("results", model=selected_model, page=page + 1, per_page=per_page),
+              cls="button secondary"))
 
-    pagination = Div(*pagination_children, cls="pagination")
+    pagination = Div(*pagination_children, cls="pagination") if pagination_children else ""
 
     # Selettore modello
     model_options = [Option("All Models", value="all", selected=(selected_model == "all"))]
