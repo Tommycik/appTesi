@@ -166,14 +166,6 @@
       <workItem from="1756725534538" duration="6034000" />
       <workItem from="1756829045602" duration="13608000" />
     </task>
-    <task id="LOCAL-00005" summary="inference and serializing">
-      <option name="closed" value="true" />
-      <created>1753887361537</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
-      <option name="project" value="LOCAL" />
-      <updated>1753887361537</updated>
-    </task>
     <task id="LOCAL-00006" summary="inference and serializing">
       <option name="closed" value="true" />
       <created>1753986251608</created>
@@ -558,7 +550,15 @@
       <option name="project" value="LOCAL" />
       <updated>1756942359148</updated>
     </task>
-    <option name="localTasksCounter" value="54" />
+    <task id="LOCAL-00054" summary="Progresso funzionante">
+      <option name="closed" value="true" />
+      <created>1756943346088</created>
+      <option name="number" value="00054" />
+      <option name="presentableId" value="LOCAL-00054" />
+      <option name="project" value="LOCAL" />
+      <updated>1756943346088</updated>
+    </task>
+    <option name="localTasksCounter" value="55" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
