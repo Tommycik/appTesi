@@ -630,19 +630,19 @@ def inference():
     if not is_connected:
         return redirect(url_for('index'))
     if request.method == "POST":
-        prompt = request.form['prompt']
-        scale = request.form.get('scale', 0.2)
-        steps = request.form.get('steps', 50)
-        guidance = request.form.get('guidance', 6.0)
+        prompt = sanitize_text(request.form.get("prompt"), "tall glass on white background")
+        scale = sanitize_number(request.form.get('scale', 0.2), 0.2, False)
+        steps = sanitize_number(request.form.get('steps', 50), 50, True)
+        guidance = sanitize_number(request.form.get('guidance', 6.0), 6.0, False)
         model_chosen = request.form["model"]
         default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
         model_id = validate_model_or_fallback(model_chosen, default_canny)
         if model_id != model_chosen:
             flash(f"Repo {model_chosen} non valido, uso modello di default {default_canny}", "error")
         params = model_info(model_id)
-        model_type = params.get("controlnet_type", "canny")
+        model_type = sanitize_text(params.get("controlnet_type", "canny"), "canny")
         n4 = params.get("N4", False)
-        precision = params.get("mixed_precision", "fp16")  # todo aggiungere questo controllo
+        precision = sanitize_text(params.get("mixed_precision", "bf16"), "bf16")
         control_image_path = None
         remote_control_path = None
 
@@ -721,13 +721,13 @@ def inference():
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";                     
                         }} else {{
-                            result_div.innerHTML = "<pre class="progress-log">" + (data.output || data.message || "") + "</pre>";
+                            result_div.innerHTML = "<pre + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";    
                         }}
                         es.close();
                     }} else if (data.status === "running") {{
-                        result_div.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p><pre>${{(data.message||'').slice(-800)}}</pre>`;
+                        result_div.innerHTML = `<pre class="progress-log">">${{(data.message||'').slice(-800)}}</pre>`;
                     }} else if (data.status === "error") {{
                         result_div.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
                         es.close();
@@ -923,7 +923,7 @@ def training():
     if request.method == "POST":
         mode = request.form["mode"]
 
-        controlnet_type = request.form["controlnet_type"]
+        controlnet_type = sanitize_text(request.form.get("controlnet_type"), "canny")
         if (controlnet_type.lower() != "canny") & (controlnet_type.lower() != "hed"):
             flash("Unexpected type of controlnet, using Canny as default", "error")
             controlnet_type = "canny"
@@ -956,7 +956,7 @@ def training():
                     controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
 
         else:  # new model
-            new_name = request.form["new_model_name"]
+            new_name = sanitize_text(request.form.get("new_model_name"), "my-default-model")
             hub_model_id = f"{HF_NAMESPACE}/{new_name}"
 
             # check existence
@@ -982,24 +982,24 @@ def training():
             else:
                 controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
 
-        learning_rate = request.form.get("learning_rate", "2e-6")
-        steps = request.form["steps"]
-        train_batch_size = request.form["train_batch_size"]
+        learning_rate = sanitize_number(request.form.get("learning_rate", "2e-6"), 2e-6, False)
+        steps = sanitize_number(request.form.get("steps", "500"), 500, True)
+        train_batch_size = sanitize_number(request.form.get("train_batch_size", "2"), 2, True)
         n4 = request.form["N4"]
         gradient_accumulation_steps = None
         if "gradient_accumulation_steps" in request.form:
-            gradient_accumulation_steps = request.form["gradient_accumulation_steps"]
+            gradient_accumulation_steps = sanitize_number(request.form.get("gradient_accumulation_steps", "1"), 1, True)
         resolution = None
         if "resolution" in request.form:
-            resolution = request.form["resolution"]
+            resolution    = sanitize_number(request.form.get("resolution", "512"),512,  True)
             if resolution and int(resolution) > 512:
                 resolution = 512
         checkpointing_steps = None
         if "checkpointing_steps" in request.form:
-            checkpointing_steps = request.form["checkpointing_steps"]
+            checkpointing_steps = sanitize_number(request.form.get("checkpointing_steps", "250"), 250, True)
         validation_steps = None
         if "validation_steps" in request.form:
-            validation_steps = request.form["validation_steps"]
+            validation_steps    = sanitize_number(request.form.get("validation_steps","125"),   125, True)
 
         mixed_precision = None
         if n4.lower() in ["true", "yes", "1"]:
@@ -1042,8 +1042,7 @@ def training():
                 remote_validation_path = f"/workspace/tesiControlNetFlux/Src/remote_inputs/{unique_id}_{filename}"
 
                 # recupera prompt solo dopo upload
-                prompt = request.form.get("prompt")
-
+                prompt = sanitize_text(request.form.get("prompt"), "")
                 # pulizia locale
                 if local_val_path and os.path.exists(local_val_path):
                     os.remove(local_val_path)
@@ -1105,14 +1104,14 @@ def training():
                             time_el.style.display = "block";  
                             inference_link.style.display = "block";                   
                         }} else {{
-                            result_div.innerHTML = "<pre class="progress-log">" + (data.output || data.message || "") + "</pre>";
+                            result_div.innerHTML = "<pre + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";    
                             inference_link.style.display = "block";    
                         }}
                         es.close();
                     }} else if (data.status === "running") {{
-                        result_div.innerHTML = `<p>Progress: ${{data.progress || 0}}%</p><pre>${{(data.message||'').slice(-800)}}</pre>`;
+                        result_div.innerHTML = `<pre class="progress-log">">${{(data.message||'').slice(-800)}}</pre>`;
                     }} else if (data.status === "error") {{
                         result_div.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
                         es.close();
