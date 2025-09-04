@@ -395,7 +395,14 @@ def connect_lambda():
         else:
             logs, _ = ssh_manager.run_command("sudo docker logs controlnet")
             log("Container failed to start:\n" + logs)
-        return str(base_layout("Connect Lambda Failed", Pre("\n".join(log_lines)))), 500
+
+        content = Div(
+            H1("Connect Lambda Failed"),
+            Pre("\n".join(log_lines),
+                style="text-align:left; background:#222; color:#0f0; padding:1rem; border-radius:8px; max-height:60vh; overflow:auto;"),
+            A("Continue to Home", href=url_for('index'), cls="button primary")
+        )
+        return str(base_layout("Connect Lambda", content)), 500
 
     # Step 6: update repo
     log("Updating repo inside container...")
