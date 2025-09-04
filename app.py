@@ -728,13 +728,13 @@ def inference():
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";                     
                         }} else {{
-                            result_div.innerHTML = "<pre + (data.output || data.message || "") + "</pre>";
+                            result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";    
                         }}
                         es.close();
                     }} else if (data.status === "running") {{
-                        result_div.innerHTML = `<pre class="progress-log">">${{(data.message||'').slice(-800)}}</pre>`;
+                        result_div.innerHTML = `<pre class="progress-log">${{(data.message||'').slice(-800)}}</pre>`;
                     }} else if (data.status === "error") {{
                         result_div.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
                         es.close();
@@ -1111,14 +1111,14 @@ def training():
                             time_el.style.display = "block";  
                             inference_link.style.display = "block";                   
                         }} else {{
-                            result_div.innerHTML = "<pre + (data.output || data.message || "") + "</pre>";
+                            result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";    
                             inference_link.style.display = "block";    
                         }}
                         es.close();
                     }} else if (data.status === "running") {{
-                        result_div.innerHTML = `<pre class="progress-log">">${{(data.message||'').slice(-800)}}</pre>`;
+                        result_div.innerHTML = `<pre class="progress-log">${{(data.message||'').slice(-800)}}</pre>`;
                     }} else if (data.status === "error") {{
                         result_div.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
                         es.close();
