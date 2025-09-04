@@ -724,7 +724,7 @@ def inference():
                     if (data.status === "done") {{
                         status.innerText = "Inference Job Terminated";
                         if (data.output && data.output.startsWith("http")) {{
-                            result_div.innerHTML = `<img src="${{data.output}}" style='max-width:100%;height:auto;'/>`;
+                            result_div.innerHTML = `<img class = "generated" src="${{data.output}}" style='max-width:100%;height:auto;'/>`;
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";                     
                         }} else {{
@@ -772,6 +772,33 @@ def inference():
         ),
         Button("Run Inference", type="submit", cls="button primary"),
         Script(f"""
+                    (function(){{
+                          function san(el, d, asInt){{
+                            let n = Number(el.value);
+                            if (!Number.isFinite(n)) {{ el.value = d; return; }}
+                            if (n < 0) n = 1;
+                            el.value = asInt ? Math.round(n) : n;
+                          }}
+                          const scale = document.querySelector('input[name="scale"]');
+                          const steps = document.querySelector('input[name="steps"]');
+                          const guidance = document.querySelector('input[name="guidance"]');
+                          if (scale)   scale.addEventListener('change',   ()=>san(scale,   0.2, false));
+                          if (steps)   steps.addEventListener('change',   ()=>san(steps,     50, true));
+                          if (guidance)guidance.addEventListener('change',()=>san(guidance, 6.0, false));
+
+                          // text guards (prompt)
+                          function cleanText(el, d){{
+                            const v = (el.value||"").trim().toLowerCase();
+                            if (!v || ["nan","undefined","none","null"].includes(v)) {{
+                              el.value = d;
+                            }}
+                          }}
+                          const textIds = ["prompt"];
+                          textIds.forEach(id=>{{
+                            const el = document.getElementById(id);
+                            if (el) el.addEventListener("change", ()=>cleanText(el, el.defaultValue||""));
+                          }});
+                        }})();
                     document.addEventListener("DOMContentLoaded", function () {{
                         const canvas = document.getElementById("drawCanvas");
                         const ctx = canvas.getContext("2d");
@@ -1261,6 +1288,100 @@ def training():
         ),
         Button("Start Training", type="submit", cls="button primary"),
         Script(f"""
+            (function(){{
+                  function san(el, d, asInt){{
+                    let n = Number(el.value);
+                    if (!Number.isFinite(n)) {{ el.value = d; return; }}
+                    if (n < 0) n = 1;
+                    el.value = asInt ? Math.round(n) : n;
+                  }}
+                  const ids = [
+                    ["learning_rate", 2e-6, false],
+                    ["steps", 500, true],
+                    ["train_batch_size", 2, true],
+                    ["gradient_accumulation_steps", 1, true],
+                    ["resolution", 512, true],
+                    ["checkpointing_steps", 250, true],
+                    ["validation_steps", 125, true],
+                  ];
+                  ids.forEach(([id, d, asInt])=>{{
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener('change', ()=>san(el, d, asInt));
+                  }});
+                
+                  
+                  function cleanText(el, d){{
+                    const v = (el.value||"").trim().toLowerCase();
+                    if (!v || ["nan","undefined","none","null"].includes(v)) {{
+                      el.value = d;
+                    }}
+                  }}
+                  const textIds = ["controlnet_type"];
+                  textIds.forEach(id=>{{
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener("change", ()=>cleanText(el, el.defaultValue||"canny"));
+                  }});
+                
+              
+                  const defaults = {{
+                    canny: {{
+                      controlnet_type: "canny",
+                      N4: "false",
+                      learning_rate: "2e-6",
+                      steps: 500,
+                      train_batch_size: 2,
+                      mixed_precision: "bf16",
+                      gradient_accumulation_steps: 1,
+                      resolution: 512,
+                      checkpointing_steps: 250,
+                      validation_steps: 125
+                    }},
+                    hed: {{
+                      controlnet_type: "hed",
+                      N4: "false",
+                      learning_rate: "2e-6",
+                      steps: 500,
+                      train_batch_size: 2,
+                      mixed_precision: "bf16",
+                      gradient_accumulation_steps: 1,
+                      resolution: 512,
+                      checkpointing_steps: 250,
+                      validation_steps: 125
+                    }}
+                  }};
+                
+                  function setVal(id, v){{ const el=document.getElementById(id); if(el) el.value=v; }}
+                  function applyDefaultsFor(kind){{
+                    const d = defaults[kind] || defaults.canny;
+                    setVal("controlnet_type", d.controlnet_type);
+                    setVal("N4", d.N4);
+                    setVal("learning_rate", d.learning_rate);
+                    setVal("steps", d.steps);
+                    setVal("train_batch_size", d.train_batch_size);
+                    setVal("mixed_precision", d.mixed_precision);
+                    setVal("gradient_accumulation_steps", d.gradient_accumulation_steps);
+                    setVal("resolution", d.resolution);
+                    setVal("checkpointing_steps", d.checkpointing_steps);
+                    setVal("validation_steps", d.validation_steps);
+                
+                    const mpGroup = document.getElementById("mixed_precision_group");
+                    if (mpGroup) mpGroup.style.display = (String(d.N4).toLowerCase()==="true") ? "none" : "block";
+                  }}
+                
+                  function maybeApplyDefaults(){{
+                    const mode = document.getElementById("mode").value;
+                    const source = document.getElementById("controlnet_source").value;
+                    if (mode === "new" && (source === "canny" || source === "hed")){{
+                      applyDefaultsFor(source);
+                    }}
+                  }}
+                
+                  const sourceSel = document.getElementById("controlnet_source");
+                  const modeSel   = document.getElementById("mode");
+                  if (sourceSel) sourceSel.addEventListener("change", maybeApplyDefaults);
+                  if (modeSel)   modeSel.addEventListener("change", maybeApplyDefaults);
+                  document.addEventListener("DOMContentLoaded", maybeApplyDefaults);
+                }})();
               function fillFromSelected(selected){{
                   if (!selected) return;
                   const d = selected.dataset;

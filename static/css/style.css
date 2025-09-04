@@ -194,6 +194,10 @@ input, select, textarea{
   border-radius: 6px;
 }
 
+img.generated {
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
 /* Parametri e prompt leggibili, occupano come le immagini */
 .result-grid pre,
 .result-grid p {
