@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="valori default" />
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="valori default">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/static/css/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/css/style.css" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -162,23 +166,8 @@
       <workItem from="1756671994399" duration="8861000" />
       <workItem from="1756725534538" duration="6034000" />
       <workItem from="1756829045602" duration="13608000" />
-      <workItem from="1756997885804" duration="3002000" />
-    </task>
-    <task id="LOCAL-00009" summary="conversione immagine caricata e modifica o creazione immagine di controllo">
-      <option name="closed" value="true" />
-      <created>1754220009520</created>
-      <option name="number" value="00009" />
-      <option name="presentableId" value="LOCAL-00009" />
-      <option name="project" value="LOCAL" />
-      <updated>1754220009520</updated>
-    </task>
-    <task id="LOCAL-00010" summary="training">
-      <option name="closed" value="true" />
-      <created>1755170151717</created>
-      <option name="number" value="00010" />
-      <option name="presentableId" value="LOCAL-00010" />
-      <option name="project" value="LOCAL" />
-      <updated>1755170151717</updated>
+      <workItem from="1756997885804" duration="3360000" />
+      <workItem from="1757001350509" duration="1874000" />
     </task>
     <task id="LOCAL-00011" summary="training">
       <option name="closed" value="true" />
@@ -556,7 +545,23 @@
       <option name="project" value="LOCAL" />
       <updated>1757000848044</updated>
     </task>
-    <option name="localTasksCounter" value="58" />
+    <task id="LOCAL-00058" summary="valori default">
+      <option name="closed" value="true" />
+      <created>1757001050566</created>
+      <option name="number" value="00058" />
+      <option name="presentableId" value="LOCAL-00058" />
+      <option name="project" value="LOCAL" />
+      <updated>1757001050566</updated>
+    </task>
+    <task id="LOCAL-00059" summary="valori default">
+      <option name="closed" value="true" />
+      <created>1757001175243</created>
+      <option name="number" value="00059" />
+      <option name="presentableId" value="LOCAL-00059" />
+      <option name="project" value="LOCAL" />
+      <updated>1757001175243</updated>
+    </task>
+    <option name="localTasksCounter" value="60" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

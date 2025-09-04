@@ -72,6 +72,15 @@ header{
 #inference_link a {
   text-align: center;
 }
+
+img.generated.preview {
+  max-width: 400px;   /* shown smaller */
+  height: auto;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  margin: 1rem auto;
+  display: block;
+}
 /* ---------- LAYOUT ---------- */
 .container{max-width:1400px; margin:1rem auto; padding:1rem;}
 .center-box{

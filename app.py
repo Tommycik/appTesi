@@ -320,6 +320,9 @@ class SSHManager:
             errors = "".join(error_chunks) if exit_code != 0 else ""
             return output, errors
 
+    def run_in_screen(self, job_id, command):
+        log_cmd = f"screen -dmS job_{job_id} bash -c {shlex.quote(command)} > /tmp/{job_id}.log 2>&1"
+        return self.run_command(log_cmd)
 def as_str(v, default=""):
     if isinstance(v, bool): return "True" if v else "False"
     return str(v if v is not None else default)
@@ -327,19 +330,24 @@ def as_str(v, default=""):
 @app.route("/events/<job_id>")
 def sse_events(job_id):
     def stream():
-        # send current state if available
-        current = results_db.get(job_id)
-        if current:
-            yield f"data: {json.dumps(current)}\n\n"
+        try:
+            out, _ = ssh_manager.run_command(f"cat /tmp/{job_id}.log || true")
+            if out:
+                for line in out.splitlines():
+                    yield f"data: {json.dumps({'status': 'running', 'message': line})}\n\n"
+        except Exception as e:
+            print(f"Replay failed for {job_id}: {e}")
+
+            # now stream live updates
         q = job_queues[job_id]
         while True:
-            # blocks until new message is available
             payload = q.get()
             try:
                 yield f"data: {json.dumps(payload)}\n\n"
             except GeneratorExit:
                 break
-    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}  # help avoid buffering
+
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"} #help avoid buffering
     return Response(stream(), mimetype="text/event-stream", headers=headers)
 
 @app.route('/connect_lambda')
@@ -446,8 +454,10 @@ def worker():
             start_time = time.time()
             publish(job_id, {"status": "running", "progress": 0, "started": start_time})
 
-            # streaming will publish intermediate lines/progress
-            output, errors = ssh_manager.run_command_streaming(command, job_id)
+            ssh_manager.run_in_screen(job_id, command)
+
+            # now stream logs in real time
+            output, errors = ssh_manager.run_command_streaming(f"tail -f /tmp/{job_id}.log", job_id)
 
             elapsed = int(time.time() - start_time)
             # try to detect a final URL in the collected output
@@ -718,13 +728,27 @@ def inference():
                 const status = document.getElementById("job-status");
                 const result_div = document.getElementById("result-section");
                 const time_el = document.getElementById("time");
-                const es = new EventSource("{url_for('sse_events', job_id=job_id)}");
+                function connectSSE() {{
+                  const es = new EventSource("{{ url_for('sse_events', job_id=job_id) }}");
+                
+                  es.onmessage = (e) => {{
+                    const data = JSON.parse(e.data);
+                    // ... your existing handling code ...
+                  }};
+                
+                  es.onerror = () => {{
+                    console.warn("SSE connection lost, retrying in 3s...");
+                    es.close();
+                    setTimeout(connectSSE, 3000);  // retry
+                  }};
+                }}
+                connectSSE();
                 es.onmessage = (e) => {{
                     const data = JSON.parse(e.data);
                     if (data.status === "done") {{
                         status.innerText = "Inference Job Terminated";
                         if (data.output && data.output.startsWith("http")) {{
-                            result_div.innerHTML = `<img class = "generated" src="${{data.output}}" style='max-width:100%;height:auto;'/>`;
+                            result_div.innerHTML = `<img class = "generated preview" src="${{data.output}}" style='max-width:100%;height:auto;'/><p><a href="${{data.output}}" target="_blank">Open full resolution</a></p>`;
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";                     
                         }} else {{
@@ -1126,7 +1150,21 @@ def training():
             const status = document.getElementById("job-status");
                 const result_div = document.getElementById("result-section");
                 const time_el = document.getElementById("time");
-                const es = new EventSource("{url_for('sse_events', job_id=job_id)}");
+                function connectSSE() {{
+                  const es = new EventSource("{{ url_for('sse_events', job_id=job_id) }}");
+                
+                  es.onmessage = (e) => {{
+                    const data = JSON.parse(e.data);
+                    // ... your existing handling code ...
+                  }};
+                
+                  es.onerror = () => {{
+                    console.warn("SSE connection lost, retrying in 3s...");
+                    es.close();
+                    setTimeout(connectSSE, 3000);  // retry
+                  }};
+                }}
+                connectSSE();
                 const inference_link = document.getElementById("inference_link");
                 es.onmessage = (e) => {{
                     const data = JSON.parse(e.data);
@@ -1560,10 +1598,7 @@ def results():
             # Otherwise continue fetching until either page is full or no more items
             cursor = next_cursor
 
-    # == Ottieni i risultati solo per la pagina corrente ==
-    image_resources = []
     next_cursor = None
-    model_key = selected_model
 
     try:
         if selected_model == "all":
@@ -1647,7 +1682,7 @@ def results():
             except Exception:
                 control_img_tag = None
 
-            resized_url = f"{url}?w=512&h=512&c=fit"
+            resized_url = url
 
             if not (control_img_tag or params_text or prompt_text):
                 grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
