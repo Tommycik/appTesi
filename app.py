@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 import paramiko
 import requests
+import math
 import yaml
 import sys
 from PIL import Image
@@ -59,6 +60,30 @@ job_queues = defaultdict(queue.Queue)   # in-memory per-job queues to push event
 results_lock = threading.Lock()
 # A lock to serialize the SSH command
 worker_lock = threading.Lock()
+
+
+
+def sanitize_number(val, default, force_int=False):
+    try:
+        v = float(val)
+        if math.isnan(v):
+            return default
+        if v < 0:
+            v = 1
+        return int(round(v)) if force_int else v
+    except Exception:
+        return default
+
+def sanitize_text(val, default):
+    try:
+        if val is None:
+            return default
+        v = str(val).strip()
+        if not v or v.lower() in ["nan", "undefined", "none", "null"]:
+            return default
+        return v
+    except Exception:
+        return default
 
 def publish(job_id: str, payload: dict):
     """Save payload to results_db and push it to job queue for SSE consumers."""
@@ -696,7 +721,7 @@ def inference():
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";                     
                         }} else {{
-                            result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
+                            result_div.innerHTML = "<pre class="progress-log">" + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";    
                         }}
@@ -1063,7 +1088,7 @@ def training():
             P(f"Job ID: {job_id}"),
             P(f"Elapsed time", style="display:none;", id="time"),
             Div("Waiting for your turn...", id="result-section"),
-            A("Go to Inference Page", href=url_for('inference'), id="inference_link", cls="button primary", style = "display: none; width: fit-content;"),
+            Div(A("Go to Inference Page", href=url_for('inference'), id="inference_link", cls="button primary", style = "display: none; width: fit-content;"), cls="center-box"),
             Script(f"""
             const status = document.getElementById("job-status");
                 const result_div = document.getElementById("result-section");
@@ -1080,7 +1105,7 @@ def training():
                             time_el.style.display = "block";  
                             inference_link.style.display = "block";                   
                         }} else {{
-                            result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
+                            result_div.innerHTML = "<pre class="progress-log">" + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";    
                             inference_link.style.display = "block";    
