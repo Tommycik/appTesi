@@ -462,7 +462,7 @@ def worker():
                 )
 
             start_time = time.time()
-            publish(job_id, {"status": "running", "progress": 0, "started": start_time})
+            publish(job_id, {"status": "running", "message": "Work started", "started": start_time})
 
             pid = ssh_manager.run_in_screen(job_id, command)
             if not pid:
