@@ -321,12 +321,17 @@ class SSHManager:
             return output, errors
 
     def run_in_screen(self, job_id, command):
+        # Start screen session with logging to /tmp/{job_id}.log
         log_cmd = (
-            f"screen -dmS job_{job_id} bash -c {shlex.quote(command)} "
-            f"> /tmp/{job_id}.log 2>&1 & echo $!"
+            f"screen -L -Logfile /tmp/{job_id}.log -dmS job_{job_id} bash -c {shlex.quote(command)}"
         )
-        out, _ = self.run_command(log_cmd)
-        return out.strip()
+        self.run_command(log_cmd)
+
+        # Get the PID of the screen process
+        out, _ = self.run_command(f"screen -ls | grep job_{job_id} | awk '{{print $1}}'")
+        if out:
+            return out.strip().split('.')[0]  # screen session PID
+        return None
 
 def as_str(v, default=""):
     if isinstance(v, bool): return "True" if v else "False"
@@ -457,9 +462,13 @@ def worker():
                 )
 
             start_time = time.time()
-            publish(job_id, {"status": "running", "progress": 0, "started": start_time})
+            publish(job_id, {"status": "running", "message": "Work started", "started": start_time})
 
             pid = ssh_manager.run_in_screen(job_id, command)
+            if not pid:
+                raise RuntimeError("Failed to start screen job")
+
+            # Tail until screen process exits
             cmd = f"tail --pid={pid} -f /tmp/{job_id}.log"
             output, errors = ssh_manager.run_command_streaming(cmd, job_id)
 
@@ -1146,7 +1155,7 @@ def training():
             P(f"Job ID: {job_id}"),
             P(f"Elapsed time", style="display:none;", id="time"),
             Div("Waiting for your turn...", id="result-section"),
-            Div(A("Go to Inference Page", href=url_for('inference'), id="inference_link", cls="button primary", style = "display: none; width: fit-content;"), cls="center-box"),
+            Div(A("Go to Inference Page", href=url_for('inference'), id="inference_link", cls="button primary", style = "display: none; width: fit-content;"),style="background=none;border:none;box-shadow:none;", cls="center-box"),
             Script(f"""
             const status = document.getElementById("job-status");
                 const result_div = document.getElementById("result-section");
@@ -1158,12 +1167,7 @@ def training():
                     const data = JSON.parse(e.data);
                     if (data.status === "done") {{
                         status.innerText = "Training Job Terminated";
-                        if (data.output && data.output.startsWith("http")) {{
-                            result_div.innerHTML = `<img src="${{data.output}}" style='max-width:100%;height:auto;'/>`;
-                            time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
-                            time_el.style.display = "block";  
-                            inference_link.style.display = "block";                   
-                        }} else {{
+                        if (data.output) {{
                             result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
                             time_el.style.display = "block";    

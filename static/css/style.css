@@ -202,7 +202,6 @@ input, select, textarea{
 
 img.generated {
   image-rendering: crisp-edges;
-  image-rendering: pixelated;
 }
 
 .result-grid pre,
