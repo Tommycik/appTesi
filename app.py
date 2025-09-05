@@ -450,7 +450,7 @@ def worker():
 
         try:
             print(f"[{time.ctime()}] Worker: Starting job {job_id}")
-            # ensure container is running (unchanged from your current code)
+            # ensure container is running
             status_cmd = "sudo docker inspect -f '{{.State.Running}}' controlnet 2>/dev/null || echo false"
             out, _ = ssh_manager.run_command(status_cmd)
             if "true" not in out.lower():
@@ -462,18 +462,40 @@ def worker():
                 )
 
             start_time = time.time()
-            publish(job_id, {"status": "running", "message": "Work started", "started": start_time})
+            publish(job_id, {"status": "running", "progress": 0, "started": start_time})
 
             pid = ssh_manager.run_in_screen(job_id, command)
             if not pid:
                 raise RuntimeError("Failed to start screen job")
 
-            # Tail until screen process exits
-            cmd = f"tail --pid={pid} -f /tmp/{job_id}.log"
-            output, errors = ssh_manager.run_command_streaming(cmd, job_id)
+            log_file = f"/tmp/{job_id}.log"
+
+            # resilient loop
+            output, errors = "", ""
+            while True:
+                try:
+                    cmd = f"tail --pid={pid} -f {log_file}"
+                    chunk_out, chunk_err = ssh_manager.run_command_streaming(cmd, job_id)
+                    output += chunk_out
+                    errors += chunk_err
+                    break  # finished normally
+                except Exception as e:
+                    print(f"[{time.ctime()}] Worker: Lost connection for job {job_id}: {e}")
+                    publish(job_id, {"status": "running", "message": "⚠ Connection lost, retrying..."})
+                    time.sleep(3)
+                    ssh_manager.reconnect_if_needed()
+
+                    # check if job already finished
+                    still_running, _ = ssh_manager.run_command(f"ps -p {pid} || true")
+                    if "defunct" in still_running or not still_running.strip():
+                        # fetch remaining logs
+                        final_out, _ = ssh_manager.run_command(f"cat {log_file} || true")
+                        output += final_out
+                        break  # exit loop
 
             elapsed = int(time.time() - start_time)
-            # try to detect a final URL in the collected output
+
+            # detect final outputs
             url_match = re.search(r'(https?://\S+)', output)
             finished_match = re.search(r"_complete\b", output, re.IGNORECASE)
             if url_match:
@@ -483,7 +505,6 @@ def worker():
             elif errors:
                 publish(job_id, {"status": "error", "message": errors, "elapsed": elapsed})
             else:
-                # maybe the job printed nothing but finished
                 publish(job_id, {"status": "done", "output": output or "done", "elapsed": elapsed})
 
         except Exception as e:
@@ -767,9 +788,10 @@ def inference():
                 }};
                 
                   es.onerror = () => {{
-                    console.warn("SSE connection lost, retrying in 3s...");
-                    es.close();
-                    setTimeout(connectSSE, 3000);  // retry
+                     console.warn("SSE connection lost, retrying in 3s...");
+                     result_div.innerHTML = `<p style="color:orange">Connection lost, retrying...</p>`;
+                     es.close();
+                     setTimeout(connectSSE, 3000);
                   }};
                 }}
                 connectSSE();
@@ -1183,9 +1205,10 @@ def training():
                 }};
                 
                   es.onerror = () => {{
-                    console.warn("SSE connection lost, retrying in 3s...");
-                    es.close();
-                    setTimeout(connectSSE, 3000);  // retry
+                     console.warn("SSE connection lost, retrying in 3s...");
+                     result_div.innerHTML = `<p style="color:orange">Connection lost, retrying...</p>`;
+                     es.close();
+                     setTimeout(connectSSE, 3000);
                   }};
                 }}
                 connectSSE();
