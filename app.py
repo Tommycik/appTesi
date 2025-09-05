@@ -321,8 +321,13 @@ class SSHManager:
             return output, errors
 
     def run_in_screen(self, job_id, command):
-        log_cmd = f"screen -dmS job_{job_id} bash -c {shlex.quote(command)} > /tmp/{job_id}.log 2>&1"
-        return self.run_command(log_cmd)
+        log_cmd = (
+            f"screen -dmS job_{job_id} bash -c {shlex.quote(command)} "
+            f"> /tmp/{job_id}.log 2>&1 & echo $!"
+        )
+        out, _ = self.run_command(log_cmd)
+        return out.strip()
+
 def as_str(v, default=""):
     if isinstance(v, bool): return "True" if v else "False"
     return str(v if v is not None else default)
@@ -454,10 +459,9 @@ def worker():
             start_time = time.time()
             publish(job_id, {"status": "running", "progress": 0, "started": start_time})
 
-            ssh_manager.run_in_screen(job_id, command)
-
-            # now stream logs in real time
-            output, errors = ssh_manager.run_command_streaming(f"tail -f /tmp/{job_id}.log", job_id)
+            pid = ssh_manager.run_in_screen(job_id, command)
+            cmd = f"tail --pid={pid} -f /tmp/{job_id}.log"
+            output, errors = ssh_manager.run_command_streaming(cmd, job_id)
 
             elapsed = int(time.time() - start_time)
             # try to detect a final URL in the collected output
@@ -716,7 +720,7 @@ def inference():
         print(command)
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
-
+        sse_url = url_for("sse_events", job_id=job_id)
         content = Div(
             H2("Inference Job Submitted", id="job-status"),
             P(f"Model: {model_id}"),
@@ -729,21 +733,9 @@ def inference():
                 const result_div = document.getElementById("result-section");
                 const time_el = document.getElementById("time");
                 function connectSSE() {{
-                  const es = new EventSource("{{ url_for('sse_events', job_id=job_id) }}");
+                  const es = new EventSource("{sse_url}");
                 
                   es.onmessage = (e) => {{
-                    const data = JSON.parse(e.data);
-                    // ... your existing handling code ...
-                  }};
-                
-                  es.onerror = () => {{
-                    console.warn("SSE connection lost, retrying in 3s...");
-                    es.close();
-                    setTimeout(connectSSE, 3000);  // retry
-                  }};
-                }}
-                connectSSE();
-                es.onmessage = (e) => {{
                     const data = JSON.parse(e.data);
                     if (data.status === "done") {{
                         status.innerText = "Inference Job Terminated";
@@ -764,6 +756,15 @@ def inference():
                         es.close();
                     }}
                 }};
+                
+                  es.onerror = () => {{
+                    console.warn("SSE connection lost, retrying in 3s...");
+                    es.close();
+                    setTimeout(connectSSE, 3000);  // retry
+                  }};
+                }}
+                connectSSE();
+                
                     """),
             id="content")
 
@@ -896,7 +897,7 @@ def inference():
         enctype="multipart/form-data",
         cls="form-card",)
 
-    return str(base_layout("Inference", form, extra_scripts=["js/inference.js"])), 200
+    return str(base_layout("Inference", form)), 200
 
 
 @app.route("/preprocess_image", methods=["POST"])
@@ -1138,9 +1139,9 @@ def training():
         print(command)
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
-
+        sse_url = url_for("sse_events", job_id=job_id)
         content = Div(
-            H2("Training Job Submitted", id = "job-status"),
+            H2("Training Job Submitted", id="job-status"),
             P(f"Model: {hub_model_id}"),
             P(f"Job ID: {job_id}"),
             P(f"Elapsed time", style="display:none;", id="time"),
@@ -1151,22 +1152,9 @@ def training():
                 const result_div = document.getElementById("result-section");
                 const time_el = document.getElementById("time");
                 function connectSSE() {{
-                  const es = new EventSource("{{ url_for('sse_events', job_id=job_id) }}");
+                  const es = new EventSource("{sse_url}");
                 
                   es.onmessage = (e) => {{
-                    const data = JSON.parse(e.data);
-                    // ... your existing handling code ...
-                  }};
-                
-                  es.onerror = () => {{
-                    console.warn("SSE connection lost, retrying in 3s...");
-                    es.close();
-                    setTimeout(connectSSE, 3000);  // retry
-                  }};
-                }}
-                connectSSE();
-                const inference_link = document.getElementById("inference_link");
-                es.onmessage = (e) => {{
                     const data = JSON.parse(e.data);
                     if (data.status === "done") {{
                         status.innerText = "Training Job Terminated";
@@ -1189,6 +1177,16 @@ def training():
                         es.close();
                     }}
                 }};
+                
+                  es.onerror = () => {{
+                    console.warn("SSE connection lost, retrying in 3s...");
+                    es.close();
+                    setTimeout(connectSSE, 3000);  // retry
+                  }};
+                }}
+                connectSSE();
+                const inference_link = document.getElementById("inference_link");
+                
                 """),
             id="content", cls="result")
         return str(base_layout("Waiting for Training", content)), 200

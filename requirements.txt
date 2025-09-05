@@ -4,3 +4,9 @@ python-dotenv
 paramiko
 fasthtml
 cloudinary
+opencv-python
+numpy
+yaml
+scp
+pillow
+torch
