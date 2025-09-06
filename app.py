@@ -81,6 +81,10 @@ def sanitize_text(val, default):
     except Exception:
         return default
 
+def as_str(v, default=""):
+    if isinstance(v, bool): return "True" if v else "False"
+    return str(v if v is not None else default)
+
 def publish(job_id: str, payload: dict):
     #Pushing status for SSE consumers
     with results_lock:
@@ -142,6 +146,33 @@ def model_info(model_id):
         print(f"No config for {model_id}: {e}")
         return {}
 
+def get_lambda_info():
+    headers = {
+        "Authorization": f"Bearer {LAMBDA_CLOUD_API_KEY}"
+    }
+    url = f"{LAMBDA_CLOUD_API_BASE}"
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            instances = data.get("data", [])
+            print("DEBUG: Instance list from Lambda API:")
+            print(instances)
+
+            for instance in instances:
+                if instance.get("ip") == LAMBDA_INSTANCE_IP:
+                    print("DEBUG: Matched instance:", instance)
+                    return instance
+
+            print("Instance ID not found.")
+            return None
+        except Exception as e:
+            print(f"Failed to parse Lambda instance JSON: {e}")
+            return None
+    else:
+        print(f"Failed to get instance list: {response.status_code} {response.text}")
+        return None
 
 def scp_to_lambda(local_path, remote_path):
     key = paramiko.RSAKey.from_private_key_file(SSH_PRIVATE_KEY_PATH)
@@ -176,7 +207,7 @@ class SSHManager:
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.client.connect(hostname=self.ip, username=self.username, pkey=key)
-            # Imposta il keepalive ogni 30 secondi
+            # Keep alive
             transport = self.client.get_transport()
             if transport:
                 transport.set_keepalive(30)
@@ -232,7 +263,7 @@ class SSHManager:
                 # normalize CR-only progress updates; keep the trailing partial
                 normalized = buffer_text.replace("\r\n", "\n").replace("\r", "\n")
                 parts = normalized.split("\n")
-                return parts[:-1], parts[-1]  # (full_lines, tail)
+                return parts[:-1], parts[-1]
 
             while True:
                 if chan.recv_ready():
@@ -244,12 +275,12 @@ class SSHManager:
                         if not line:
                             continue
                         if job_id:
-                            # publish line
+                            # Print line
                             print(line)
-                            # match progress patterns
+
                             progress = None
                             msg = None
-
+                            # Match progress patterns
                             # Inference style (plain tqdm without prefix)
                             m = re.search(r'^\s*(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                             if m:
@@ -283,7 +314,7 @@ class SSHManager:
                                 if m:
                                     progress = int(m.group(1))
                                     msg = f"Loading checkpoint: {progress}%"
-
+                            # Uploading files
                             elif line.strip().startswith("Processing Files"):
                                 m = re.search(r'(\d{1,3})%\|', line)
                                 if m:
@@ -316,6 +347,7 @@ class SSHManager:
             errors = "".join(error_chunks) if exit_code != 0 else ""
             return output, errors
 
+    #Wrapper to run a command using Screen
     def run_in_screen(self, job_id, command):
         # Start screen session with logging to /tmp/{job_id}.log
         log_cmd = (
@@ -326,12 +358,97 @@ class SSHManager:
         # Get the PID of the screen process
         out, _ = self.run_command(f"screen -ls | grep job_{job_id} | awk '{{print $1}}'")
         if out:
-            return out.strip().split('.')[0]  # screen session PID
+            return out.strip().split('.')[0]
         return None
 
-def as_str(v, default=""):
-    if isinstance(v, bool): return "True" if v else "False"
-    return str(v if v is not None else default)
+# Helper function for messages
+def flash_html_messages():
+    messages_html = []
+    for category, message in get_flashed_messages(with_categories=True):
+        messages_html.append(
+            Div(message, class_=f"alert alert-{category}")
+        )
+    if messages_html:
+        return Div(*messages_html, class_="messages")
+    return ""
+
+def worker():
+    print("Worker thread has started and is ready to process jobs.")
+    while True:
+        job = work_queue.get()
+        if job is None:
+            break
+        job_id = job['job_id']
+        command = job['command']
+
+        try:
+            print(f"[{time.ctime()}] Worker: Starting job {job_id}")
+            # ensure container is running
+            status_cmd = "sudo docker inspect -f '{{.State.Running}}' controlnet 2>/dev/null || echo false"
+            out, _ = ssh_manager.run_command(status_cmd)
+            if "true" not in out.lower():
+                # Restarting docker if not running
+                ssh_manager.run_command(
+                    f"sudo docker rm -f controlnet || true && "
+                    f"sudo docker start controlnet || "
+                    f"sudo docker run -d --gpus all --name controlnet "
+                    f"--entrypoint python3 {DOCKER_IMAGE_NAME} -c \"import time; time.sleep(1e9)\""
+                )
+
+            start_time = time.time()
+            # First status
+            publish(job_id, {"status": "running", "message": "Work started", "started": start_time})
+
+            pid = ssh_manager.run_in_screen(job_id, command)
+            if not pid:
+                raise RuntimeError("Failed to start screen job")
+
+            log_file = f"/tmp/{job_id}.log"
+
+            # Resilient loop
+            output, errors = "", ""
+            while True:
+                try:
+                    cmd = f"tail --pid={pid} -f {log_file}"
+                    chunk_out, chunk_err = ssh_manager.run_command_streaming(cmd, job_id)
+                    output += chunk_out
+                    errors += chunk_err
+                    # Finished normally
+                    break
+                except Exception as e:
+                    print(f"[{time.ctime()}] Worker: Lost connection for job {job_id}: {e}")
+                    publish(job_id, {"status": "running", "message": "⚠ Connection lost, retrying..."})
+                    time.sleep(3)
+                    ssh_manager.reconnect_if_needed()
+
+                    # Check if job already finished
+                    still_running, _ = ssh_manager.run_command(f"ps -p {pid} || true")
+                    if "defunct" in still_running or not still_running.strip():
+                        # Fetch remaining logs
+                        final_out, _ = ssh_manager.run_command(f"cat {log_file} || true")
+                        output += final_out
+                        # Exit loop
+                        break
+
+            elapsed = int(time.time() - start_time)
+
+            # Detect final outputs
+            url_match = re.search(r'(https?://\S+)', output)
+            finished_match = re.search(r"_complete\b", output, re.IGNORECASE)
+            if url_match:
+                publish(job_id, {"status": "done", "output": url_match.group(0), "elapsed": elapsed})
+            elif finished_match:
+                publish(job_id, {"status": "done", "message": "done", "elapsed": elapsed})
+            elif errors:
+                publish(job_id, {"status": "error", "message": errors, "elapsed": elapsed})
+            else:
+                publish(job_id, {"status": "done", "output": output or "done", "elapsed": elapsed})
+
+        except Exception as e:
+            print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
+            publish(job_id, {"status": "error", "message": str(e)})
+        finally:
+            work_queue.task_done()
 
 @app.route("/events/<job_id>")
 def sse_events(job_id):
@@ -344,7 +461,7 @@ def sse_events(job_id):
         except Exception as e:
             print(f"Replay failed for {job_id}: {e}")
 
-            # now stream live updates
+            # Stream live updates
         q = job_queues[job_id]
         while True:
             payload = q.get()
@@ -353,7 +470,8 @@ def sse_events(job_id):
             except GeneratorExit:
                 break
 
-    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"} #help avoid buffering
+    # Help avoid buffering
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     return Response(stream(), mimetype="text/event-stream", headers=headers)
 
 @app.route('/connect_lambda')
@@ -395,10 +513,10 @@ def connect_lambda():
     )
     log(out or err)
 
-    log("Installing extra Python packages (pyyaml, huggingface_hub)...")
+    log("Installing extra Python packages ")
     ssh_manager.run_command(
         "sudo docker exec controlnet pip install --upgrade pip && "
-        "sudo docker exec controlnet pip install pyyaml huggingface_hub tqdm"
+        "sudo docker exec controlnet pip install pyyaml huggingface_hub tqdm screen"
     )
     # Step 5: check running
     status, _ = ssh_manager.run_command("sudo docker inspect -f '{{.State.Running}}' controlnet || echo false")
@@ -433,131 +551,6 @@ def connect_lambda():
         A("Continue to Home", href=url_for('index'), cls="button primary")
     )
     return str(base_layout("Connect Lambda", content)), 200
-
-
-def worker():
-    print("Worker thread has started and is ready to process jobs.")
-    while True:
-        job = work_queue.get()
-        if job is None:
-            break
-        job_id = job['job_id']
-        command = job['command']
-
-        try:
-            print(f"[{time.ctime()}] Worker: Starting job {job_id}")
-            # ensure container is running
-            status_cmd = "sudo docker inspect -f '{{.State.Running}}' controlnet 2>/dev/null || echo false"
-            out, _ = ssh_manager.run_command(status_cmd)
-            if "true" not in out.lower():
-                ssh_manager.run_command(
-                    f"sudo docker rm -f controlnet || true && "
-                    f"sudo docker start controlnet || "
-                    f"sudo docker run -d --gpus all --name controlnet "
-                    f"--entrypoint python3 {DOCKER_IMAGE_NAME} -c \"import time; time.sleep(1e9)\""
-                )
-
-            start_time = time.time()
-            publish(job_id, {"status": "running", "message": "Work started", "started": start_time})
-
-            pid = ssh_manager.run_in_screen(job_id, command)
-            if not pid:
-                raise RuntimeError("Failed to start screen job")
-
-            log_file = f"/tmp/{job_id}.log"
-
-            # resilient loop
-            output, errors = "", ""
-            while True:
-                try:
-                    cmd = f"tail --pid={pid} -f {log_file}"
-                    chunk_out, chunk_err = ssh_manager.run_command_streaming(cmd, job_id)
-                    output += chunk_out
-                    errors += chunk_err
-                    break  # finished normally
-                except Exception as e:
-                    print(f"[{time.ctime()}] Worker: Lost connection for job {job_id}: {e}")
-                    publish(job_id, {"status": "running", "message": "⚠ Connection lost, retrying..."})
-                    time.sleep(3)
-                    ssh_manager.reconnect_if_needed()
-
-                    # check if job already finished
-                    still_running, _ = ssh_manager.run_command(f"ps -p {pid} || true")
-                    if "defunct" in still_running or not still_running.strip():
-                        # fetch remaining logs
-                        final_out, _ = ssh_manager.run_command(f"cat {log_file} || true")
-                        output += final_out
-                        break  # exit loop
-
-            elapsed = int(time.time() - start_time)
-
-            # detect final outputs
-            url_match = re.search(r'(https?://\S+)', output)
-            finished_match = re.search(r"_complete\b", output, re.IGNORECASE)
-            if url_match:
-                publish(job_id, {"status": "done", "output": url_match.group(0), "elapsed": elapsed})
-            elif finished_match:
-                publish(job_id, {"status": "done", "message": "done", "elapsed": elapsed})
-            elif errors:
-                publish(job_id, {"status": "error", "message": errors, "elapsed": elapsed})
-            else:
-                publish(job_id, {"status": "done", "output": output or "done", "elapsed": elapsed})
-
-        except Exception as e:
-            print(f"[{time.ctime()}] Worker: Exception for job {job_id}: {e}")
-            publish(job_id, {"status": "error", "message": str(e)})
-        finally:
-            work_queue.task_done()
-
-
-worker_thread = threading.Thread(target=worker, daemon=True)
-worker_thread.start()
-
-
-# SSH Utilities
-def get_lambda_info():
-    headers = {
-        "Authorization": f"Bearer {LAMBDA_CLOUD_API_KEY}"
-    }
-    url = f"{LAMBDA_CLOUD_API_BASE}"
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        try:
-            data = response.json()
-            instances = data.get("data", [])
-            print("DEBUG: Instance list from Lambda API:")
-            print(instances)
-
-            for instance in instances:
-                if instance.get("ip") == LAMBDA_INSTANCE_IP:
-                    print("DEBUG: Matched instance:", instance)
-                    return instance
-
-            print("Instance ID not found.")
-            return None
-        except Exception as e:
-            print(f"Failed to parse Lambda instance JSON: {e}")
-            return None
-    else:
-        print(f"Failed to get instance list: {response.status_code} {response.text}")
-        return None
-
-
-ssh_manager = SSHManager(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH)
-
-
-# Helper function for messages
-def flash_html_messages():
-    messages_html = []
-    for category, message in get_flashed_messages(with_categories=True):
-        messages_html.append(
-            Div(message, class_=f"alert alert-{category}")
-        )
-    if messages_html:
-        return Div(*messages_html, class_="messages")
-    return ""
-
 
 def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
     cache_buster = int(time.time())
@@ -594,6 +587,7 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             *scripts,
             Script(f"""
                 document.addEventListener("DOMContentLoaded", () => {{
+                // Possibility to add a toggle for nav
                   const nav = document.querySelector(".nav");
                   const toggle = document.getElementById("navToggle");
                   if (toggle && nav){{
@@ -639,7 +633,6 @@ def index():
                 A("Go to Inference Page", cls="button primary", href=url_for('inference')),
                 A("Go to Training Page", cls="button primary", href=url_for('training')),
                 A("Go to Results Page", cls="button primary", href=url_for('results')),
-
                 cls="points_links"
             ),
         )
@@ -651,9 +644,9 @@ def index():
         Hr(),
         H2("Getting Started"),
         Div(
-            P("Create a Lambda Cloud account & API Key."),
+            P("Create a Lambda Cloud account & API key."),
             P("Start the lambda machine and wait until it's started"),
-            P(f"Make sure the Lambda IP and region are set correctly (IP: {LAMBDA_INSTANCE_IP}, Region : {REGION})."),
+            P(f"Make sure the Lambda machine IP, Lambda API key and region are set correctly (IP: {LAMBDA_INSTANCE_IP}, Region : {REGION})."),
             cls="points"
         ),
         Hr(),
@@ -661,15 +654,6 @@ def index():
         id="content", class_="container")
 
     return str(base_layout("Home", content)), 200
-
-
-@app.route('/job_result/<job_id>', methods=["GET"])
-def get_result(job_id):
-    result = results_db.get(job_id)
-    if result is None:
-        return jsonify({"status": "waiting"}), 200
-    return jsonify(result), 200
-
 
 @app.route('/inference', methods=["GET", "POST"])
 def inference():
@@ -1761,6 +1745,10 @@ def results():
 
     return str(base_layout("Results", content)), 200
 
+ssh_manager = SSHManager(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH)
+#Worker start
+worker_thread = threading.Thread(target=worker, daemon=True)
+worker_thread.start()
 
 # main driver function
 if __name__ == '__main__':
