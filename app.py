@@ -5,19 +5,15 @@ import threading
 import time
 import uuid
 from io import BytesIO
-from typing import Any
 from scp import SCPClient
-import json, re
+import json
 from collections import defaultdict
-import os
 import cloudinary
 import cv2
 import numpy as np
 import paramiko
 import requests
-import math
 import yaml
-import sys
 from PIL import Image
 from cloudinary.api import resources
 from dotenv import load_dotenv
@@ -27,6 +23,7 @@ from huggingface_hub import HfApi, hf_hub_download
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+
 app.secret_key = os.urandom(12)
 LAMBDA_CLOUD_API_BASE = "https://cloud.lambdalabs.com/api/v1/instances"
 LAMBDA_CLOUD_API_KEY = os.getenv('LAMBDA_CLOUD_API_KEY')
@@ -50,7 +47,6 @@ HF_NAMESPACE = "tommycik"
 api = HfApi()
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 sys.stdout.reconfigure(encoding='utf-8')
-
 load_dotenv()
 # serializing request to lambda
 work_queue = queue.Queue()
@@ -65,12 +61,12 @@ worker_lock = threading.Lock()
 
 def sanitize_number(val, default, force_int=False):
     try:
-        v = float(val)
-        if math.isnan(v):
+        value = float(val)
+        if math.isnan(value):
             return default
-        if v < 0:
-            v = 1
-        return int(round(v)) if force_int else v
+        if value < 0:
+            value = 1
+        return int(round(value)) if force_int else value
     except Exception:
         return default
 
@@ -78,15 +74,15 @@ def sanitize_text(val, default):
     try:
         if val is None:
             return default
-        v = str(val).strip()
-        if not v or v.lower() in ["nan", "undefined", "none", "null"]:
+        value = str(val).strip()
+        if not value or value.lower() in ["nan", "undefined", "none", "null"]:
             return default
-        return v
+        return value
     except Exception:
         return default
 
 def publish(job_id: str, payload: dict):
-    """Save payload to results_db and push it to job queue for SSE consumers."""
+    #Pushing status for SSE consumers
     with results_lock:
         results_db[job_id] = payload
     try:
@@ -128,10 +124,10 @@ def validate_model_or_fallback(model_id: str, default_model: str):
         if "config.json" in files:
             return model_id
         else:
-            print(f"[WARNING] Repo {model_id} non valido, uso fallback {default_model}")
+            print(f"[WARNING] Repository {model_id} not valid, using fallback {default_model}")
             return default_model
     except Exception as e:
-        print(f"[ERROR] Impossibile accedere al repo {model_id}: {e}")
+        print(f"[ERROR] Repository {model_id} not accessible : {e}, using default")
         return default_model
 
 def model_info(model_id):
