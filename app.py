@@ -877,7 +877,14 @@ def inference():
             Label("Upload Image:"),
             Input(type="file", name="images", id="uploadInput", accept="image/*", multiple=True),
             Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid #ccc;"),
-            Button("Clear Canvas", type="button", id="clearCanvasBtn", cls="button secondary"),
+            Div(
+                Button("Pencil", type="button", id="pencilBtn", cls="button secondary"),
+                Button("Eraser", type="button", id="eraserBtn", cls="button secondary"),
+                Button("Undo", type="button", id="undoBtn", cls="button secondary"),
+                Button("Redo", type="button", id="redoBtn", cls="button secondary"),
+                Button("Clear", type="button", id="clearCanvasBtn", cls="button secondary"),
+                cls="button-group"
+            ),
             Input(type="hidden", name="control_image_data", id="controlImageData")
         ),
         Button("Run Inference", type="submit", cls="button primary"),
@@ -917,65 +924,77 @@ def inference():
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
                     
                         let drawing = false;
+                        let tool = "pencil"; // default tool
                     
-                        canvas.addEventListener("mousedown", () => drawing = true);
+                        let undoStack = [];
+                        let redoStack = [];
+                    
+                        function saveState() {{
+                            undoStack.push(canvas.toDataURL());
+                            redoStack = [];
+                        }}
+                    
+                        function restoreState(dataURL) {{
+                            let img = new Image();
+                            img.onload = () => {{
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                ctx.drawImage(img, 0, 0);
+                            }};
+                            img.src = dataURL;
+                        }}
+                    
+                        canvas.addEventListener("mousedown", () => {{
+                            drawing = true;
+                            saveState();
+                        }});
+                    
                         canvas.addEventListener("mouseup", () => {{
                             drawing = false;
                             ctx.beginPath();
                         }});
+                    
                         canvas.addEventListener("mousemove", function(e) {{
                             if (!drawing) return;
-                            ctx.lineWidth = 0.5;
+                            ctx.lineWidth = 5;
                             ctx.lineCap = "round";
-                            ctx.strokeStyle = "white";
+                            ctx.strokeStyle = (tool === "pencil") ? "white" : "black";
                             ctx.lineTo(e.offsetX, e.offsetY);
                             ctx.stroke();
                             ctx.beginPath();
                             ctx.moveTo(e.offsetX, e.offsetY);
                         }});
                     
-                        function clearCanvas() {{
+                        // Buttons
+                        document.getElementById("clearCanvasBtn").addEventListener("click", () => {{
+                            saveState();
                             ctx.clearRect(0, 0, canvas.width, canvas.height);
                             ctx.fillStyle = "black";
                             ctx.fillRect(0, 0, canvas.width, canvas.height);
-                            window.convertedImage = null;
-                        }}
-                    
-                        document.getElementById("clearCanvasBtn").addEventListener("click", clearCanvas);
-                    
-                        document.getElementById("uploadInput").addEventListener("change", async function (e) {{
-                            const files = e.target.files;
-                            if (!files.length) return;
-                    
-                            const model = document.getElementById("model").value;
-                            const formData = new FormData();
-                    
-                            for (let file of files) {{
-                                formData.append("images", file);
-                            }}
-                            formData.append("model", model);
-                    
-                            const response = await fetch("/preprocess_image", {{ method: "POST", body: formData }});
-                            const data = await response.json();
-                    
-                            if (data.status === "ok") {{
-                                const img = new Image();
-                                img.onload = function () {{
-                                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                    window.convertedImage = img;
-                                }};
-                                img.src = data.converted_data_url;
-                            }} else {{
-                                alert("Error: " + data.error);
-                                }}
                         }});
                     
+                        document.getElementById("pencilBtn").addEventListener("click", () => tool = "pencil");
+                        document.getElementById("eraserBtn").addEventListener("click", () => tool = "eraser");
+                    
+                        document.getElementById("undoBtn").addEventListener("click", () => {{
+                            if (undoStack.length > 0) {{
+                                redoStack.push(canvas.toDataURL());
+                                restoreState(undoStack.pop());
+                            }}
+                        }});
+                    
+                        document.getElementById("redoBtn").addEventListener("click", () => {{
+                            if (redoStack.length > 0) {{
+                                undoStack.push(canvas.toDataURL());
+                                restoreState(redoStack.pop());
+                            }}
+                        }});
+                    
+                        // Save on submit
                         document.querySelector("form").addEventListener("submit", function () {{
                             const dataURL = canvas.toDataURL("image/png");
                             document.getElementById("controlImageData").value = dataURL;
-                            }});
                         }});
+                    }});
         """),
         method="post",
         id="content",
