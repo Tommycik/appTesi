@@ -21,8 +21,23 @@ from fasthtml.common import *
 from flask import Flask, url_for, request, redirect, flash, session, get_flashed_messages, jsonify, Response
 from huggingface_hub import HfApi, hf_hub_download
 from werkzeug.utils import secure_filename
+from flask_babel import Babel, _
 
 app = Flask(__name__)
+#Automatic translation
+app.config['BABEL_DEFAULT_LOCALE'] = 'en'
+app.config['BABEL_TRANSLATION_DIRECTORIES'] = 'translations'
+babel = Babel(app)
+
+@babel.localeselector
+def get_locale():
+    return session.get('lang', 'en')
+
+@app.route('/set_lang/<lang>')
+def set_language(lang):
+    if lang in ['en', 'it']:
+        session['lang'] = lang
+    return redirect(request.referrer or url_for('index'))
 
 app.secret_key = os.urandom(12)
 LAMBDA_CLOUD_API_BASE = "https://cloud.lambdalabs.com/api/v1/instances"
@@ -558,19 +573,23 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
     nav_links = []
     # Always show Home if not on index
     if request.endpoint != 'index':
-        nav_links.append(A("Home", href=url_for('index'), cls="nav-link"))
+        nav_links.append(A(_("Home"), href=url_for('index'), cls="nav-link"))
 
     if is_connected:
         nav_links.extend([
-            A("Inference", href=url_for('inference'), cls="nav-link"),
-            A("Training", href=url_for('training'), cls="nav-link"),
-            A("Results", href=url_for('results'), cls="nav-link"),
+            A(_("Inference"), href=url_for('inference'), cls="nav-link"),
+            A(_("Training"), href=url_for('training'), cls="nav-link"),
+            A(_("Results"), href=url_for('results'), cls="nav-link"),
         ])
     else:
-        nav_links.append(A("Connect to Lambda", href=url_for('connect_lambda'), cls="nav-link"))
+        nav_links.append(A(_("Connect to Lambda"), href=url_for('connect_lambda'), cls="nav-link"))
 
     navigation = Nav(*nav_links, cls="nav")
-
+    lang_buttons = Div(
+        A("EN", href=url_for("set_language", lang="en"), cls="button secondary small"),
+        A("IT", href=url_for("set_language", lang="it"), cls="button secondary small"),
+        cls="lang-toggle"
+    )
     scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
     if extra_scripts:
         scripts.extend([Script(src=url_for('static', filename=path, v=cache_buster)) for path in extra_scripts])
@@ -583,7 +602,7 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             Link(rel="stylesheet", href=url_for('static', filename='css/style.css', v=cache_buster))
         ),
         Body(
-            Header(H1("Flux Designer", cls="site-title"), navigation),
+            Header(H1(_("Flux Designer"), cls="site-title"), navigation, lang_buttons),
             Main(Div(flash_html_messages(), content, id="main_div", cls="container")),
             Footer(P("© 2025 Lambda ControlNet App")),
             *scripts,

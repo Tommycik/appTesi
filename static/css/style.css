@@ -124,6 +124,17 @@ img.generated.preview {
   transform:scale(1.05);
 }
 
+.lang-toggle {
+  display: flex;
+  gap: .5rem;
+  justify-content: center;
+  margin-top: .5rem;
+}
+.button.small {
+  padding: .4rem .8rem;
+  font-size: .85rem;
+  border-radius: 8px;
+}
 /* Forms*/
 .form-card{
   background:var(--panel);
