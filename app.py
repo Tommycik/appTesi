@@ -531,7 +531,7 @@ def connect_lambda():
         content = Div(
             H1("Connect Lambda Failed"),
             Pre("\n".join(log_lines),
-                style="text-align:left; background:#222; color:#0f0; padding:1rem; border-radius:8px; max-height:60vh; overflow:auto;"),
+                style="text-align:left; background:#222; color:#f33; padding:1rem; border-radius:8px; max-height:60vh; overflow:auto;"),
             A("Continue to Home", href=url_for('index'), cls="button primary")
         )
         return str(base_layout("Connect Lambda", content)), 500
@@ -555,19 +555,21 @@ def connect_lambda():
 def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
     cache_buster = int(time.time())
     is_connected = session.get('lambda_connected', False)
-    if is_connected:
+    nav_links = []
+    # Always show Home if not on index
+    if request.endpoint != 'index':
+        nav_links.append(A("Home", href=url_for('index'), cls="nav-link"))
 
-        navigation = Nav(
+    if is_connected:
+        nav_links.extend([
             A("Inference", href=url_for('inference'), cls="nav-link"),
             A("Training", href=url_for('training'), cls="nav-link"),
             A("Results", href=url_for('results'), cls="nav-link"),
-            cls="nav",
-        )
+        ])
     else:
-        navigation = Nav(
-            A("Connect to Lambda", href=url_for('connect_lambda'), cls="nav-link"),
-            cls="nav",
-        )
+        nav_links.append(A("Connect to Lambda", href=url_for('connect_lambda'), cls="nav-link"))
+
+    navigation = Nav(*nav_links, cls="nav")
 
     scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
     if extra_scripts:
