@@ -27,11 +27,11 @@ app = Flask(__name__)
 #Automatic translation
 app.config['BABEL_DEFAULT_LOCALE'] = 'en'
 app.config['BABEL_TRANSLATION_DIRECTORIES'] = 'translations'
-babel = Babel(app)
 
-@babel.localeselector
 def get_locale():
-    return session.get('lang', 'en')
+    return request.accept_languages.best_match(['en', 'it'])
+
+babel = Babel(app, locale_selector=get_locale)
 
 @app.route('/set_lang/<lang>')
 def set_language(lang):
@@ -491,16 +491,21 @@ def sse_events(job_id):
 
 @app.route('/connect_lambda')
 def connect_lambda():
+    from flask_babel import _
     if not LAMBDA_CLOUD_API_KEY:
-        return str(base_layout(_("Error"), P(_("Lambda API key is not configured!")))), 400
+        return str(base_layout((_("Error")), P(_("Lambda API key is not configured!")))), 400
 
     instance_data = get_lambda_info()
     if not instance_data:
         return str(base_layout(_("Error"), P(_("Lambda instance not found.")))), 400
     if instance_data.get("status") != "active":
-        return str(base_layout(_("Error"), P(_("Instance not active (status=%(status)s)", status=instance_data['status'])))), 400
+        return str(base_layout(
+            _("Error"),
+            P(_("Instance not active (status=%(status)s)") % {"status": instance_data['status']})
+        )), 400
 
     log_lines = []
+
     def log(msg):
         log_lines.append(msg)
         print(msg)
@@ -512,7 +517,7 @@ def connect_lambda():
     ssh_manager.run_command("sudo systemctl restart docker")
 
     # Step 2: pull image
-    log(_("Pulling Docker image %(image)s...", image=DOCKER_IMAGE_NAME))
+    log(_("Pulling Docker image %(image)s...") % {"image": DOCKER_IMAGE_NAME})
     out, err = ssh_manager.run_command(f"sudo docker pull {DOCKER_IMAGE_NAME}")
     log(out or err)
 
