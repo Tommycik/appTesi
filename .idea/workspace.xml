@@ -7,7 +7,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="Log rossis e fallimento, link alla home aggiunto, stile canvas migliorato">
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="Aggiunta traduzione automatica">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -177,15 +178,8 @@
       <workItem from="1757201200934" duration="1189000" />
       <workItem from="1757491572803" duration="1790000" />
       <workItem from="1757538608718" duration="338000" />
-      <workItem from="1757605981899" duration="3329000" />
-    </task>
-    <task id="LOCAL-00021" summary="training permette creazione nuovi modelli e parametri passati con yaml">
-      <option name="closed" value="true" />
-      <created>1755467285829</created>
-      <option name="number" value="00021" />
-      <option name="presentableId" value="LOCAL-00021" />
-      <option name="project" value="LOCAL" />
-      <updated>1755467285829</updated>
+      <workItem from="1757605981899" duration="3752000" />
+      <workItem from="1757664464599" duration="4178000" />
     </task>
     <task id="LOCAL-00022" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
       <option name="closed" value="true" />
@@ -571,7 +565,15 @@
       <option name="project" value="LOCAL" />
       <updated>1757626034523</updated>
     </task>
-    <option name="localTasksCounter" value="70" />
+    <task id="LOCAL-00070" summary="Aggiunta traduzione automatica">
+      <option name="closed" value="true" />
+      <created>1757627380460</created>
+      <option name="number" value="00070" />
+      <option name="presentableId" value="LOCAL-00070" />
+      <option name="project" value="LOCAL" />
+      <updated>1757627380460</updated>
+    </task>
+    <option name="localTasksCounter" value="71" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -620,7 +622,8 @@
     <MESSAGE value="risolto bug screen" />
     <MESSAGE value="pulizia codice, mancano tre pagine principali" />
     <MESSAGE value="Log rossis e fallimento, link alla home aggiunto, stile canvas migliorato" />
-    <option name="LAST_COMMIT_MESSAGE" value="Log rossis e fallimento, link alla home aggiunto, stile canvas migliorato" />
+    <MESSAGE value="Aggiunta traduzione automatica" />
+    <option name="LAST_COMMIT_MESSAGE" value="Aggiunta traduzione automatica" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />

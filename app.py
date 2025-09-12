@@ -263,7 +263,7 @@ class SSHManager:
         with self.lock:
             self.reconnect_if_needed()
             if not self.client:
-                return "", "SSH client not connected"
+                return "", _("SSH client not connected")
 
             transport = self.client.get_transport()
             chan = transport.open_session()
@@ -290,51 +290,51 @@ class SSHManager:
                         if not line:
                             continue
                         if job_id:
-                            # Print line
                             print(line)
 
                             progress = None
                             msg = None
-                            # Match progress patterns
+
                             # Inference style (plain tqdm without prefix)
                             m = re.search(r'^\s*(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                             if m:
                                 progress = int(m.group(1))
-                                msg = f"Progress: {progress}%"
+                                msg = _("Progress: %(progress)d%%", progress=progress)
 
                             # Training steps
                             elif line.strip().startswith("Steps:"):
                                 m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                                 if m:
                                     progress = int(m.group(1))
-                                    msg = f"Progress: {progress}%"
+                                    msg = _("Progress: %(progress)d%%", progress=progress)
 
                             # Map evaluation
                             elif line.strip().startswith("Map:"):
                                 m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                                 if m:
                                     progress = int(m.group(1))
-                                    msg = f"Map: {progress}%"
+                                    msg = _("Map: %(progress)d%%", progress=progress)
 
                             # Fetching files
                             elif line.strip().startswith("Fetching"):
                                 m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                                 if m:
                                     progress = int(m.group(1))
-                                    msg = f"Fetching files: {progress}%"
+                                    msg = _("Fetching files: %(progress)d%%", progress=progress)
 
                             # Loading checkpoint shards
                             elif line.strip().startswith("Loading checkpoint shards"):
                                 m = re.search(r'(\d{1,3})%\|.*?(\d+)/(\d+)', line)
                                 if m:
                                     progress = int(m.group(1))
-                                    msg = f"Loading checkpoint: {progress}%"
+                                    msg = _("Loading checkpoint: %(progress)d%%", progress=progress)
+
                             # Uploading files
                             elif line.strip().startswith("Processing Files"):
                                 m = re.search(r'(\d{1,3})%\|', line)
                                 if m:
                                     progress = int(m.group(1))
-                                    msg = f"Processing Files: {progress}%"
+                                    msg = _("Processing Files: %(progress)d%%", progress=progress)
 
                             if msg is not None:
                                 publish(job_id, {
@@ -346,14 +346,14 @@ class SSHManager:
                 if chan.recv_stderr_ready():
                     chunk = chan.recv_stderr(4096).decode("utf-8", errors="ignore")
                     error_chunks.append(chunk)
-                    buf_err += chunk  # we keep stderr buffered, not streaming to UI
+                    buf_err += chunk  # stderr buffered
 
                 if chan.exit_status_ready() and not chan.recv_ready() and not chan.recv_stderr_ready():
                     break
 
                 time.sleep(0.05)
 
-            # publish the final CR-overwritten line (if any)
+            # publish any trailing line
             if buf_out.strip() and job_id:
                 publish(job_id, {"status": "running", "message": buf_out.strip()})
 
@@ -492,13 +492,13 @@ def sse_events(job_id):
 @app.route('/connect_lambda')
 def connect_lambda():
     if not LAMBDA_CLOUD_API_KEY:
-        return str(base_layout("Error", P("Lambda API key is not configured!"))), 400
+        return str(base_layout(_("Error"), P(_("Lambda API key is not configured!")))), 400
 
     instance_data = get_lambda_info()
     if not instance_data:
-        return str(base_layout("Error", P("Lambda instance not found."))), 400
+        return str(base_layout(_("Error"), P(_("Lambda instance not found.")))), 400
     if instance_data.get("status") != "active":
-        return str(base_layout("Error", P(f"Instance not active (status={instance_data['status']})"))), 400
+        return str(base_layout(_("Error"), P(_("Instance not active (status=%(status)s)", status=instance_data['status'])))), 400
 
     log_lines = []
     def log(msg):
@@ -506,29 +506,29 @@ def connect_lambda():
         print(msg)
 
     # Step 1: fix DNS, docker config
-    log("Configuring Docker daemon...")
+    log(_("Configuring Docker daemon..."))
     ssh_manager.run_command("echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf")
     ssh_manager.run_command("echo '{ \"ipv6\": false }' | sudo tee /etc/docker/daemon.json")
     ssh_manager.run_command("sudo systemctl restart docker")
 
     # Step 2: pull image
-    log(f"Pulling Docker image {DOCKER_IMAGE_NAME}...")
+    log(_("Pulling Docker image %(image)s...", image=DOCKER_IMAGE_NAME))
     out, err = ssh_manager.run_command(f"sudo docker pull {DOCKER_IMAGE_NAME}")
     log(out or err)
 
     # Step 3: ensure container fresh
-    log("Removing any old container...")
+    log(_("Removing any old container..."))
     ssh_manager.run_command("sudo docker rm -f controlnet || true")
 
     # Step 4: run container
-    log("Starting new container...")
+    log(_("Starting new container..."))
     out, err = ssh_manager.run_command(
         f"sudo docker run -d --gpus all --name controlnet "
         f"--entrypoint python3 {DOCKER_IMAGE_NAME} -c 'import time; time.sleep(1e9)'"
     )
     log(out or err)
 
-    log("Installing extra Python packages ")
+    log(_("Installing extra Python packages"))
     ssh_manager.run_command(
         "sudo docker exec controlnet pip install --upgrade pip && "
         "sudo docker exec controlnet pip install pyyaml huggingface_hub tqdm screen"
@@ -538,34 +538,34 @@ def connect_lambda():
     if "true" not in status.lower():
         exists, _ = ssh_manager.run_command("sudo docker ps -a --format '{{.Names}}' | grep -w controlnet || true")
         if not exists.strip():
-            log("Container was not created at all.")
+            log(_("Container was not created at all."))
         else:
             logs, _ = ssh_manager.run_command("sudo docker logs controlnet")
-            log("Container failed to start:\n" + logs)
+            log(_("Container failed to start:") + "\n" + logs)
 
         content = Div(
-            H1("Connect Lambda Failed"),
+            H1(_("Connect Lambda Failed")),
             Pre("\n".join(log_lines),
                 style="text-align:left; background:#222; color:#f33; padding:1rem; border-radius:8px; max-height:60vh; overflow:auto;"),
-            A("Continue to Home", href=url_for('index'), cls="button primary")
+            A(_("Continue to Home"), href=url_for('index'), cls="button primary")
         )
-        return str(base_layout("Connect Lambda", content)), 500
+        return str(base_layout(_("Connect Lambda"), content)), 500
 
     # Step 6: update repo
-    log("Updating repo inside container...")
+    log(_("Updating repo inside container..."))
     ssh_manager.run_command(
         "sudo docker exec controlnet bash -c 'cd /workspace/tesiControlNetFlux &&  git pull '"
     )
 
     session['lambda_connected'] = True
-    log("Lambda is ready.")
+    log(_("Lambda is ready."))
 
     content = Div(
-        H1("Connect Lambda Logs"),
+        H1(_("Connect Lambda Logs")),
         Pre("\n".join(log_lines), style="text-align:left; background:#222; color:#0f0; padding:1rem; border-radius:8px; max-height:60vh; overflow:auto;"),
-        A("Continue to Home", href=url_for('index'), cls="button primary")
+        A(_("Continue to Home"), href=url_for('index'), cls="button primary")
     )
-    return str(base_layout("Connect Lambda", content)), 200
+    return str(base_layout(_("Connect Lambda"), content)), 200
 
 def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
     cache_buster = int(time.time())
@@ -630,18 +630,20 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
     )
 
 
-@app.route('/')
+@app.route("/")
 def index():
     is_connected = session.get('lambda_connected', False)
 
     if not is_connected:
         action_section = Div(
-            P("Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready."),
-            A("Connect to Lambda & Pull Docker Image",id="connectBtn", href=url_for('connect_lambda'), cls="button "
-                                                                                                           "primary"),
+            P(_("Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready.")),
+            A(_("Connect to Lambda & Pull Docker Image"),
+              id="connectBtn",
+              href=url_for('connect_lambda'),
+              cls="button primary"),
             Script(f"""
                 document.getElementById("connectBtn").addEventListener("click", function(){{
-                  this.innerText = "Connecting...";
+                  this.innerText = "{_('Connecting...')}";
                   this.classList.add("loading");
                   }});
                 """),
@@ -649,32 +651,33 @@ def index():
         )
     else:
         action_section = Div(
-            H2("Lambda instance is connected and Docker image is ready."),
+            H2(_("Lambda instance is connected and Docker image is ready.")),
             Div(
-                A("Go to Inference Page", cls="button primary", href=url_for('inference')),
-                A("Go to Training Page", cls="button primary", href=url_for('training')),
-                A("Go to Results Page", cls="button primary", href=url_for('results')),
+                A(_("Go to Inference Page"), cls="button primary", href=url_for('inference')),
+                A(_("Go to Training Page"), cls="button primary", href=url_for('training')),
+                A(_("Go to Results Page"), cls="button primary", href=url_for('results')),
                 cls="points_links"
             ),
         )
 
     content = Div(
-        H1("Lambda ControlNet App", cls="hero-title"),
-        P("Generate and fine-tune images with ControlNet models running on Lambda Cloud.",
+        H1(_("Lambda ControlNet App"), cls="hero-title"),
+        P(_("Generate and fine-tune images with ControlNet models running on Lambda Cloud."),
           cls="hero-subtitle"),
         Hr(),
-        H2("Getting Started"),
+        H2(_("Getting Started")),
         Div(
-            P("Create a Lambda Cloud account & API key."),
-            P("Start the lambda machine and wait until it's started"),
-            P(f"Make sure the Lambda machine IP, Lambda API key and region are set correctly (IP: {LAMBDA_INSTANCE_IP}, Region : {REGION})."),
+            P(_("Create a Lambda Cloud account & API key.")),
+            P(_("Start the Lambda machine and wait until it's started")),
+            P(_("Make sure the Lambda machine IP, Lambda API key and region are set correctly (IP: %(ip)s, Region: %(region)s).",
+                ip=LAMBDA_INSTANCE_IP, region=REGION)),
             cls="points"
         ),
         Hr(),
         action_section,
         id="content", class_="container")
 
-    return str(base_layout("Home", content)), 200
+    return str(base_layout(_("Home"), content)), 200
 
 @app.route("/preprocess_image", methods=["POST"])
 def preprocess_image():
@@ -701,21 +704,19 @@ def preprocess_image():
             elif controlnet_type == "hed":
                 result_path = convert_to_hed(temp_path)
             else:
-                #todo controllare risposta
-                return jsonify({"status": "error", "error": f"Invalid model_type: {controlnet_type}"})
+                return jsonify({"status": "error", "error": _("Invalid model_type: %(ctype)s", ctype=controlnet_type)})
 
             # Verify the file exists before proceeding.
             if not os.path.exists(result_path):
                 raise FileNotFoundError(
-                    f"Processed image file was not created by the conversion function: {result_path}")
+                    _("Processed image file was not created by the conversion function: %(path)s", path=result_path))
 
-            # Add the processed file to the cleanup list
             if result_path and result_path != temp_path:
                 temp_files_to_clean.append(result_path)
 
             img_arr = cv2.imread(result_path, cv2.IMREAD_GRAYSCALE)
             if img_arr is None:
-                raise ValueError(f"Failed to read processed image at {result_path}")
+                raise ValueError(_("Failed to read processed image at %(path)s", path=result_path))
 
             desired_size = (512, 512)
             img_arr = cv2.resize(img_arr, desired_size, interpolation=cv2.INTER_AREA)
@@ -725,9 +726,8 @@ def preprocess_image():
                 merged_image = cv2.add(merged_image, img_arr)
 
         if merged_image is None:
-            return jsonify({"status": "error", "error": "No valid images were processed."}), 500
+            return jsonify({"status": "error", "error": _("No valid images were processed.")}), 500
 
-        # Convert merged_image back to RGB for canvas
         merged_rgb = cv2.cvtColor(merged_image, cv2.COLOR_GRAY2RGB)
         merged_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}_merged.jpg")
         temp_files_to_clean.append(merged_path)
@@ -742,7 +742,6 @@ def preprocess_image():
         print(e)
         return jsonify({"status": "error", "error": str(e)})
     finally:
-        # Cleanup temporary files in a robust way
         for fpath in temp_files_to_clean:
             try:
                 if os.path.exists(fpath):
@@ -750,11 +749,13 @@ def preprocess_image():
             except OSError as e:
                 print(f"Error removing temporary file {fpath}: {e}")
 
+
 @app.route('/inference', methods=["GET", "POST"])
 def inference():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
         return redirect(url_for('index'))
+
     if request.method == "POST":
         prompt = sanitize_text(request.form.get("prompt"), "tall glass on white background")
         scale = sanitize_number(request.form.get('scale', 0.2), 0.2, False)
@@ -764,10 +765,13 @@ def inference():
         default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
         model_id = validate_model_or_fallback(model_chosen, default_canny)
         if model_id != model_chosen:
-            flash(f"Repo {model_chosen} non valido, uso modello di default {default_canny}", "error")
+            flash(_("Repo %(repo)s not valid, using default model %(default)s",
+                    repo=model_chosen, default=default_canny), "error")
+
         params = model_info(model_id)
         model_type = sanitize_text(params.get("controlnet_type", "canny"), "canny")
         n4 = params.get("N4", False)
+        # future possible control
         precision = sanitize_text(params.get("mixed_precision", "bf16"), "bf16")
         control_image_path = None
         remote_control_path = None
@@ -777,35 +781,26 @@ def inference():
             header, encoded = image_url.split(",", 1)
             binary_data = base64.b64decode(encoded)
             image = Image.open(BytesIO(binary_data)).convert("RGB")
-
-            # Check if image is completely white (or blank)
             np_image = np.array(image)
             if not np.all(np_image == 0):
                 import tempfile
                 unique_id = str(uuid.uuid4())
                 control_image_path = os.path.join(tempfile.gettempdir(), f"{unique_id}.jpg")
                 image.save(control_image_path)
-
-                # percorso host
                 remote_control_host_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{unique_id}.jpg"
                 scp_to_lambda(control_image_path, remote_control_host_path)
-
-                # copia nel container mantenendo lo stesso nome
                 ssh_manager.run_command(
                     "sudo docker exec controlnet mkdir -p /workspace/tesiControlNetFlux/Src/remote_inputs"
                 )
-
-                # copia solo il file, con percorso preciso
                 ssh_manager.run_command(
                     f"sudo docker cp /home/ubuntu/tesiControlNetFlux/remote_inputs/{unique_id}.jpg "
                     f"controlnet:/workspace/tesiControlNetFlux/Src/remote_inputs/{unique_id}.jpg"
                 )
-
-                # percorso visto dal container
                 remote_control_path = f"remote_inputs/{unique_id}.jpg"
                 if control_image_path and os.path.exists(control_image_path):
                     os.remove(control_image_path)
-        # Call Lambda via SSH
+
+        # Command to run inference (unchanged except for variables)
         command = (
             f"sudo docker exec -e PYTHONUNBUFFERED=1 "
             f"-e TQDM_MININTERVAL=0 "
@@ -823,92 +818,103 @@ def inference():
         if n4:
             command += f" --N4"
         print(command)
+
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
         sse_url = url_for("sse_events", job_id=job_id)
+
+        # JS translations
+        js_job_done = _("Inference Job Terminated")
+        js_open_full = _("Open full resolution")
+        js_elapsed = _("Elapsed time: %(seconds)s seconds")
+        js_error = _("Error")
+        js_lost = _("Connection lost, retrying in 3s...")
+        js_retry = _("Connection lost, retrying...")
+
         content = Div(
-            H2("Inference Job Submitted", id="job-status"),
-            P(f"Model: {model_id}"),
-            P(f"Prompt: {prompt}"),
-            P(f"Job ID: {job_id}"),
-            P(f"Elapsed time", style="display:none;", id="time"),
-            Div("Waiting for your turn...", id="result-section"),
+            H2(_("Inference Job Submitted"), id="job-status"),
+            P(_("Model: %(model)s", model=model_id)),
+            P(_("Prompt: %(prompt)s", prompt=prompt)),
+            P(_("Job ID: %(jobid)s", jobid=job_id)),
+            P(_("Elapsed time"), style="display:none;", id="time"),
+            Div(_("Waiting for your turn..."), id="result-section"),
             Script(f"""
                 const status = document.getElementById("job-status");
                 const result_div = document.getElementById("result-section");
                 const time_el = document.getElementById("time");
                 function connectSSE() {{
                   const es = new EventSource("{sse_url}");
-                
+
                   es.onmessage = (e) => {{
                     const data = JSON.parse(e.data);
                     if (data.status === "done") {{
-                        status.innerText = "Inference Job Terminated";
+                        status.innerText = "{js_job_done}";
                         if (data.output && data.output.startsWith("http")) {{
-                            result_div.innerHTML = `<img class = "generated preview" src="${{data.output}}" style='max-width:100%;height:auto;'/><p><a href="${{data.output}}" target="_blank">Open full resolution</a></p>`;
-                            time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
+                            result_div.innerHTML = `<img class="generated preview" src="${{data.output}}" style='max-width:100%;height:auto;'/><p><a href="${{data.output}}" target="_blank">{js_open_full}</a></p>`;
+                            time_el.innerHTML = data.elapsed ? `{js_elapsed}`.replace("%(seconds)s", data.elapsed) : "";                       
                             time_el.style.display = "block";                     
                         }} else {{
                             result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
-                            time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
+                            time_el.innerHTML = data.elapsed ? `{js_elapsed}`.replace("%(seconds)s", data.elapsed) : "";                       
                             time_el.style.display = "block";    
                         }}
                         es.close();
                     }} else if (data.status === "running") {{
                         result_div.innerHTML = `<pre class="progress-log">${{(data.message||'').slice(-800)}}</pre>`;
                     }} else if (data.status === "error") {{
-                        result_div.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
+                        result_div.innerHTML = `<p style="color:#f66">{js_error}: ${{data.message || 'unknown'}}</p>`;
                         es.close();
                     }}
                 }};
-                
+
                   es.onerror = () => {{
-                     console.warn("SSE connection lost, retrying in 3s...");
-                     result_div.innerHTML = `<p style="color:orange">Connection lost, retrying...</p>`;
+                     console.warn("{js_lost}");
+                     result_div.innerHTML = `<p style="color:orange">{js_retry}</p>`;
                      es.close();
                      setTimeout(connectSSE, 3000);
                   }};
                 }}
                 connectSSE();
-                
-                    """),
-            id="content")
+            """),
+            id="content"
+        )
+        return str(base_layout(_("Waiting for Inference"), content)), 200
 
-        return str(base_layout("Waiting for Inference", content)), 200
+    # GET method
     models = models_list()
     options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
 
     form = Form(
         Fieldset(
-            Legend("Model Selection"),
+            Legend(_("Model Selection")),
             Select(*options, id="model", name="model"),
         ),
         Fieldset(
-            Legend("Parameters"),
+            Legend(_("Parameters")),
             Div(
-                Label("Scale:"), Input(type="number", name="scale", step="0.1", value="0.2"),
-                Label("Steps:"), Input(type="number", name="steps", value="50"),
-                Label("Guidance:"), Input(type="number", name="guidance", step="0.5", value="6.0"),
+                Label(_("Scale:")), Input(type="number", name="scale", step="0.1", value="0.2"),
+                Label(_("Steps:")), Input(type="number", name="steps", value="50"),
+                Label(_("Guidance:")), Input(type="number", name="guidance", step="0.5", value="6.0"),
                 cls="form-row"
             )
         ),
         Fieldset(
-            Legend("Prompt & Control Image"),
-            Label("Prompt:"), Input(type="text", name="prompt", required=True, cls="input"),
-            Label("Upload Image:"),
+            Legend(_("Prompt & Control Image")),
+            Label(_("Prompt:")), Input(type="text", name="prompt", required=True, cls="input"),
+            Label(_("Upload Image:")),
             Input(type="file", name="images", id="uploadInput", accept="image/*", multiple=True),
             Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid #ccc;"),
             Div(
-                Button("Pencil", type="button", id="pencilBtn", cls="button secondary"),
-                Button("Eraser", type="button", id="eraserBtn", cls="button secondary"),
-                Button("Undo", type="button", id="undoBtn", cls="button secondary"),
-                Button("Redo", type="button", id="redoBtn", cls="button secondary"),
-                Button("Clear", type="button", id="clearCanvasBtn", cls="button secondary"),
+                Button(_("Pencil"), type="button", id="pencilBtn", cls="button secondary"),
+                Button(_("Eraser"), type="button", id="eraserBtn", cls="button secondary"),
+                Button(_("Undo"), type="button", id="undoBtn", cls="button secondary"),
+                Button(_("Redo"), type="button", id="redoBtn", cls="button secondary"),
+                Button(_("Clear"), type="button", id="clearCanvasBtn", cls="button secondary"),
                 cls="button-group"
             ),
             Input(type="hidden", name="control_image_data", id="controlImageData")
         ),
-        Button("Run Inference", type="submit", cls="button primary"),
+        Button(_("Run Inference"), type="submit", cls="button primary"),
         Script(f"""
                     (function(){{
                           function san(el, d, asInt){{
@@ -1020,29 +1026,32 @@ def inference():
         method="post",
         id="content",
         enctype="multipart/form-data",
-        cls="form-card",)
+        cls="form-card",
+    )
 
-    return str(base_layout("Inference", form)), 200
+    return str(base_layout(_("Inference"), form)), 200
 
 @app.route('/training', methods=["GET", "POST"])
 def training():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
         return redirect(url_for('index'))
+
     if request.method == "POST":
         mode = request.form["mode"]
-
         controlnet_type = sanitize_text(request.form.get("controlnet_type"), "canny")
-        if (controlnet_type.lower() != "canny") & (controlnet_type.lower() != "hed"):
-            flash("Unexpected type of controlnet, using Canny as default", "error")
+        if (controlnet_type.lower() != "canny") and (controlnet_type.lower() != "hed"):
+            flash(_("Unexpected type of controlnet, using Canny as default"), "error")
             controlnet_type = "canny"
+
         if mode == "existing":
             model_id = request.form["existing_model"]
             default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
-
             hub_model_id = validate_model_or_fallback(model_id, default_canny)
             if hub_model_id != model_id:
-                flash(f"Repo {model_id} non valido, uso modello di default {default_canny}", "error")
+                flash(_("Repo %(repo)s not valid, using default model %(default)s",
+                        repo=model_id, default=default_canny), "error")
+
             reuse = request.form.get("reuse_as_controlnet", "yes")
             if reuse == "yes":
                 controlnet_model = hub_model_id
@@ -1055,26 +1064,20 @@ def training():
                 elif controlnet_source == "existing":
                     controlnet_model_tmp = request.form["existing_controlnet_model_existing"]
                     default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
-
                     controlnet_model = validate_model_or_fallback(controlnet_model_tmp, default_canny)
                     if controlnet_model != controlnet_model_tmp:
-                        flash(f"Repo {controlnet_model_tmp} non valido, uso modello di default {default_canny}",
-                              "error")
-
+                        flash(_("Repo %(repo)s not valid, using default model %(default)s",
+                                repo=controlnet_model_tmp, default=default_canny), "error")
                 else:
                     controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
-
-        else:  # new model
+        else:  # new
             new_name = sanitize_text(request.form.get("new_model_name"), "my-default-model")
             hub_model_id = f"{HF_NAMESPACE}/{new_name}"
-
-            # check existence
             existing = [m["id"] for m in models_list()]
             if hub_model_id in existing:
-                flash("Model with this name already exists on HuggingFace!", "error")
+                flash(_("Model with this name already exists on HuggingFace!"), "error")
                 return redirect(url_for("training"))
 
-            # User chooses controlnet
             controlnet_source = request.form.get("controlnet_source", "canny")
             if controlnet_source == "canny":
                 controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
@@ -1083,11 +1086,10 @@ def training():
             elif controlnet_source == "existing":
                 controlnet_model_tmp = request.form["existing_controlnet_model"]
                 default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
-
                 controlnet_model = validate_model_or_fallback(controlnet_model_tmp, default_canny)
                 if controlnet_model != controlnet_model_tmp:
-                    flash(f"Repo {controlnet_model_tmp} non valido, uso modello di default {default_canny}", "error")
-
+                    flash(_("Repo %(repo)s not valid, using default model %(default)s",
+                            repo=controlnet_model_tmp, default=default_canny), "error")
             else:
                 controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
 
@@ -1100,7 +1102,7 @@ def training():
             gradient_accumulation_steps = sanitize_number(request.form.get("gradient_accumulation_steps", "1"), 1, True)
         resolution = None
         if "resolution" in request.form:
-            resolution    = sanitize_number(request.form.get("resolution", "512"),512,  True)
+            resolution = sanitize_number(request.form.get("resolution", "512"), 512,  True)
             if resolution and int(resolution) > 512:
                 resolution = 512
         checkpointing_steps = None
@@ -1108,7 +1110,7 @@ def training():
             checkpointing_steps = sanitize_number(request.form.get("checkpointing_steps", "250"), 250, True)
         validation_steps = None
         if "validation_steps" in request.form:
-            validation_steps    = sanitize_number(request.form.get("validation_steps","125"),   125, True)
+            validation_steps = sanitize_number(request.form.get("validation_steps", "125"),   125, True)
 
         mixed_precision = None
         if n4.lower() in ["true", "yes", "1"]:
@@ -1122,37 +1124,32 @@ def training():
         if 'validation_image' in request.files:
             val_img = request.files['validation_image']
             if val_img and val_img.filename:
-                # pulisci nome file
                 filename = secure_filename(val_img.filename)
 
-                # salva localmente in /tmp
+                # local save
                 local_val_path = os.path.join(tempfile.gettempdir(), filename)
                 val_img.save(local_val_path)
 
-                # genera nome unico remoto
+                # unique name
                 unique_id = str(uuid.uuid4())
                 remote_val_host_path = f"/home/ubuntu/tesiControlNetFlux/remote_inputs/{unique_id}_{filename}"
 
-                # copia su host (via scp)
+                # send to host
                 scp_to_lambda(local_val_path, remote_val_host_path)
 
-                # assicura che la cartella esista nel container
                 ssh_manager.run_command(
                     "sudo docker exec controlnet mkdir -p /workspace/tesiControlNetFlux/Src/remote_inputs"
                 )
 
-                # copia il file dentro al container con percorso preciso
+                # copy the file in the docker
                 ssh_manager.run_command(
                     f"sudo docker cp {remote_val_host_path} "
                     f"controlnet:/workspace/tesiControlNetFlux/Src/remote_inputs/{unique_id}_{filename}"
                 )
 
-                # path visto dallo script di training dentro al container
                 remote_validation_path = f"/workspace/tesiControlNetFlux/Src/remote_inputs/{unique_id}_{filename}"
 
-                # recupera prompt solo dopo upload
                 prompt = sanitize_text(request.form.get("prompt"), "")
-                # pulizia locale
                 if local_val_path and os.path.exists(local_val_path):
                     os.remove(local_val_path)
         print(hub_model_id)
@@ -1190,53 +1187,61 @@ def training():
         job_id = str(uuid.uuid4())
         work_queue.put({"job_id": job_id, "command": command})
         sse_url = url_for("sse_events", job_id=job_id)
+
         content = Div(
-            H2("Training Job Submitted", id="job-status"),
-            P(f"Model: {hub_model_id}"),
-            P(f"Job ID: {job_id}"),
-            P(f"Elapsed time", style="display:none;", id="time"),
-            Div("Waiting for your turn...", id="result-section"),
-            Div(A("Go to Inference Page", href=url_for('inference'), id="inference_link", cls="button primary", style = "display: none; width: fit-content;"),style="background=none;border:none;box-shadow:none;", cls="center-box"),
+            H2(_("Training Job Submitted"), id="job-status"),
+            P(_("Model: %(model)s", model=hub_model_id)),
+            P(_("Job ID: %(job_id)s", job_id=job_id)),
+            P(_("Elapsed time"), style="display:none;", id="time"),
+            Div(_("Waiting for your turn..."), id="result-section"),
+            Div(
+                A(_("Go to Inference Page"),
+                  href=url_for('inference'),
+                  id="inference_link",
+                  cls="button primary",
+                  style="display: none; width: fit-content;"),
+                style="background=none;border:none;box-shadow:none;",
+                cls="center-box"
+            ),
             Script(f"""
             const status = document.getElementById("job-status");
-                const result_div = document.getElementById("result-section");
-                const time_el = document.getElementById("time");
-                function connectSSE() {{
-                  const es = new EventSource("{sse_url}");
-                
-                  es.onmessage = (e) => {{
-                    const data = JSON.parse(e.data);
-                    if (data.status === "done") {{
-                        status.innerText = "Training Job Terminated";
-                        if (data.output) {{
-                            result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
-                            time_el.innerHTML = data.elapsed ? `Elapsed time: ${{data.elapsed}} seconds` : "";                       
-                            time_el.style.display = "block";    
-                            inference_link.style.display = "block";    
-                        }}
-                        es.close();
-                    }} else if (data.status === "running") {{
-                        result_div.innerHTML = `<pre class="progress-log">${{(data.message||'').slice(-800)}}</pre>`;
-                    }} else if (data.status === "error") {{
-                        result_div.innerHTML = `<p style="color:#f66">Error: ${{data.message || 'unknown'}}</p>`;
-                        es.close();
+            const result_div = document.getElementById("result-section");
+            const time_el = document.getElementById("time");
+            function connectSSE() {{
+              const es = new EventSource("{sse_url}");
+              es.onmessage = (e) => {{
+                const data = JSON.parse(e.data);
+                if (data.status === "done") {{
+                    status.innerText = "{_('Training Job Terminated')}";
+                    if (data.output) {{
+                        result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
+                        time_el.innerHTML = data.elapsed ? "{_('Elapsed time:')} " + data.elapsed + " " + "{_('seconds')}" : "";
+                        time_el.style.display = "block";
+                        inference_link.style.display = "block";
                     }}
-                }};
-                
-                  es.onerror = () => {{
-                     console.warn("SSE connection lost, retrying in 3s...");
-                     result_div.innerHTML = `<p style="color:orange">Connection lost, retrying...</p>`;
-                     es.close();
-                     setTimeout(connectSSE, 3000);
-                  }};
+                    es.close();
+                }} else if (data.status === "running") {{
+                    result_div.innerHTML = `<pre class="progress-log">${{(data.message||'').slice(-800)}}</pre>`;
+                }} else if (data.status === "error") {{
+                    result_div.innerHTML = `<p style="color:#f66">{_('Error')}: ${{data.message || 'unknown'}}</p>`;
+                    es.close();
                 }}
-                connectSSE();
-                const inference_link = document.getElementById("inference_link");
-                
-                """),
-            id="content", cls="result")
-        return str(base_layout("Waiting for Training", content)), 200
+              }};
+              es.onerror = () => {{
+                 console.warn("SSE connection lost, retrying in 3s...");
+                 result_div.innerHTML = `<p style="color:orange">{_('Connection lost, retrying...')}</p>`;
+                 es.close();
+                 setTimeout(connectSSE, 3000);
+              }};
+            }}
+            connectSSE();
+            const inference_link = document.getElementById("inference_link");
+            """),
+            id="content", cls="result"
+        )
+        return str(base_layout(_("Waiting for Training"), content)), 200
 
+    # GET: form
     models = models_list()
     options = []
     for m in models:
@@ -1248,7 +1253,7 @@ def training():
                 value=model_id,
                 **{
                     "data_controlnet_type": params.get("controlnet_type", "canny"),
-                    "data_N4": as_str(params.get("N4", False),"False"),
+                    "data_N4": as_str(params.get("N4", False), "False"),
                     "data_steps": params.get("steps", 1000),
                     "data_train_batch_size": params.get("train_batch_size", 2),
                     "data_learning_rate": params.get("learning_rate", "2e-6"),
@@ -1260,52 +1265,53 @@ def training():
                 }
             )
         )
+
     form = Form(
         Fieldset(
-            Legend("Mode"),
+            Legend(_("Mode")),
             Select(
-                Option("Fine-tune existing model", value="existing"),
-                Option("Create new model", value="new"),
+                Option(_("Fine-tune existing model"), value="existing"),
+                Option(_("Create new model"), value="new"),
                 id="mode", name="mode"
             ),
-            Div(  # Existing model block
-                Label("Existing Model:"),
+            Div(
+                Label(_("Existing Model:")),
                 Select(*options, id="existingModel", name="existing_model"),
-                Label("ControlNet Type:"), Input(id="controlnet_type_existing", name="controlnet_type"),
-                Label("Reuse as ControlNet?"),
-                Select(Option("No", value="no"), Option("Yes", value="yes"), name="reuse_as_controlnet", id="reuse_as_controlnet"),
+                Label(_("ControlNet Type:")), Input(id="controlnet_type_existing", name="controlnet_type"),
+                Label(_("Reuse as ControlNet?")),
+                Select(Option(_("No"), value="no"), Option(_("Yes"), value="yes"),
+                       name="reuse_as_controlnet", id="reuse_as_controlnet"),
                 Div(
-                    Label("ControlNet Source:"),
+                    Label(_("ControlNet Source:")),
                     Select(
-                        Option("Default - Canny", value="canny"),
-                        Option("Default - HED", value="hed"),
-                        Option("Use Existing", value="existing"),
+                        Option(_("Default - Canny"), value="canny"),
+                        Option(_("Default - HED"), value="hed"),
+                        Option(_("Use Existing"), value="existing"),
                         id="controlnet_source_existing", name="controlnet_source_existing"
                     ),
                     Div(
-                        Label("Choose Existing ControlNet:"),
+                        Label(_("Choose Existing ControlNet:")),
                         Select(*options, id="existingControlnetModel_existing", name="existing_controlnet_model_existing"),
                         id="existingControlnetWrapper_existing", style="display:none;"
                     ),
                     cls="form-row",
                     id="existingControlnetSourceWrapper", style="display:none;"
                 ),
-
                 id="existingModelWrapper"
             ),
-            Div(  # New model block
-                Label("New Model Name:"), Input(name="new_model_name"),
-                Label("ControlNet Type:"), Input(id="controlnet_type", name="controlnet_type"),
+            Div(
+                Label(_("New Model Name:")), Input(name="new_model_name"),
+                Label(_("ControlNet Type:")), Input(id="controlnet_type", name="controlnet_type"),
                 Div(
-                    Label("ControlNet Source:"),
+                    Label(_("ControlNet Source:")),
                     Select(
-                        Option("Default - Canny", value="canny"),
-                        Option("Default - HED", value="hed"),
-                        Option("Use Existing", value="existing"),
+                        Option(_("Default - Canny"), value="canny"),
+                        Option(_("Default - HED"), value="hed"),
+                        Option(_("Use Existing"), value="existing"),
                         id="controlnet_source", name="controlnet_source"
                     ),
                     Div(
-                        Label("Choose Existing ControlNet:"),
+                        Label(_("Choose Existing ControlNet:")),
                         Select(*options, id="existingControlnetModel", name="existing_controlnet_model"),
                         id="existingControlnetWrapper", style="display:none;"
                     ),
@@ -1315,18 +1321,18 @@ def training():
             )
         ),
         Fieldset(
-            Legend("Quantization & Precision"),
+            Legend(_("Quantization & Precision")),
             Div(
-                Label("Use N4 Quantization"),
+                Label(_("Use N4 Quantization")),
                 Select(
-                    Option("No", value="false", selected=True),
-                    Option("Yes", value="true"),
+                    Option(_("No"), value="false", selected=True),
+                    Option(_("Yes"), value="true"),
                     id="N4", name="N4"
                 ),
                 cls="form-row"
             ),
             Div(
-                Label("Mixed Precision"),
+                Label(_("Mixed Precision")),
                 Select(
                     Option("no", value="no"),
                     Option("fp16", value="fp16"),
@@ -1338,35 +1344,35 @@ def training():
             )
         ),
         Fieldset(
-            Legend("Training Parameters"),
+            Legend(_("Training Parameters")),
             Div(
-                Label("Learning Rate:"), Input(id="learning_rate", name="learning_rate", value="2e-6"),
-                Label("Steps:"), Input(id="steps", name="steps", type="number", value="500"),
+                Label(_("Learning Rate:")), Input(id="learning_rate", name="learning_rate", value="2e-6"),
+                Label(_("Steps:")), Input(id="steps", name="steps", type="number", value="500"),
                 cls="form-row"
             ),
             Div(
-                Label("Batch Size:"), Input(id="train_batch_size", name="train_batch_size", type="number"),
-                Label("Gradient Accumulation:"),
+                Label(_("Batch Size:")), Input(id="train_batch_size", name="train_batch_size", type="number"),
+                Label(_("Gradient Accumulation:")),
                 Input(id="gradient_accumulation_steps", name="gradient_accumulation_steps", type="number", value="1"),
                 cls="form-row"
             ),
             Div(
-                Label("Resolution:"), Input(id="resolution", name="resolution", type="number", value="512"),
-                Label("Checkpoint Steps:"),
+                Label(_("Resolution:")), Input(id="resolution", name="resolution", type="number", value="512"),
+                Label(_("Checkpoint Steps:")),
                 Input(id="checkpointing_steps", name="checkpointing_steps", type="number", value="250"),
                 cls="form-row"
             ),
             Div(
-                Label("Validation Steps:"),
+                Label(_("Validation Steps:")),
                 Input(id="validation_steps", name="validation_steps", type="number", value="125"),
                 cls="form-row"
             )
         ),
         Fieldset(
-            Legend("Validation"),
-            Label("Validation Image:"),
+            Legend(_("Validation")),
+            Label(_("Validation Image:")),
             Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg"),
-            Div(Label("Prompt:"), Input(id="prompt", name="prompt"), id="promptWrapper", style="display:none;")
+            Div(Label(_("Prompt:")), Input(id="prompt", name="prompt"), id="promptWrapper", style="display:none;")
         ),
         Button("Start Training", type="submit", cls="button primary"),
         Script(f"""
@@ -1571,7 +1577,7 @@ def training():
         cls="form-card",
         action=url_for("training"), enctype="multipart/form-data"
     )
-    return str(base_layout("Training", form)), 200
+    return str(base_layout(_("Training"), form)), 200
 
 
 @app.route('/results', methods=["GET"])
@@ -1585,7 +1591,6 @@ def results():
     page = int(request.args.get("page", 1))
     per_page = int(request.args.get("per_page", 4))
 
-    # struttura session cursors: session['results_cursors'] = { model_id: { page_number: next_cursor, ... }, ... }
     if 'results_cursors' not in session:
         session['results_cursors'] = {}
 
@@ -1643,65 +1648,30 @@ def results():
             cursor = next_cursor
 
     next_cursor = None
-
     try:
         if selected_model == "all":
-            # prefisso generico e poi filtro per repo_image
             prefix = f"{HF_NAMESPACE}/"
-            # vediamo se abbiamo in session un cursor già per questa pagina
             cursors_for_model = session['results_cursors'].get(prefix, {})
-            start_cursor = None
-
-            # se page==1 e non abbiamo cursor, lasciamo start_cursor None
-            if page > 1:
-                # se abbiamo il cursor per page-1 usalo come start
-                prev_cursor = cursors_for_model.get(str(page-1))
-                if prev_cursor:
-                    start_cursor = prev_cursor
-                else:
-                    # fallback: iteriamo dalla pagina 1 arrivando a page-1 (sono poche chiamate)
-                    start_cursor = None
-
+            start_cursor = cursors_for_model.get(str(page-1)) if page > 1 else None
             items, next_cursor = fetch_page(prefix, prefix, page, per_page, start_cursor=start_cursor, filter_repo_image=True)
             image_resources = items
-
-            # salva cursor per questa page (se non nullo)
-            if prefix not in session['results_cursors']:
-                session['results_cursors'][prefix] = {}
-            session['results_cursors'][prefix][str(page)] = next_cursor
-
+            session['results_cursors'].setdefault(prefix, {})[str(page)] = next_cursor
         else:
-            # specific model
             model_name = selected_model.split("/")[-1]
             prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
             cursors_for_model = session['results_cursors'].get(prefix, {})
-            start_cursor = None
-            if page > 1:
-                prev_cursor = cursors_for_model.get(str(page-1))
-                if prev_cursor:
-                    start_cursor = prev_cursor
-                else:
-                    start_cursor = None
-
+            start_cursor = cursors_for_model.get(str(page-1)) if page > 1 else None
             items, next_cursor = fetch_page(prefix, prefix, page, per_page, start_cursor=start_cursor, filter_repo_image=False)
             image_resources = items
+            session['results_cursors'].setdefault(prefix, {})[str(page)] = next_cursor
 
-            if prefix not in session['results_cursors']:
-                session['results_cursors'][prefix] = {}
-            session['results_cursors'][prefix][str(page)] = next_cursor
-
-        # costruisci le card dalla singola page ONLY
         grids = []
         for r in image_resources:
             url = r.get("secure_url")
-            # costruiamo control e text URL basandoci sulla stessa struttura
             control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
-            # per i raw text Cloudinary spesso mette raw/upload; proviamo a costruire l'url raw sostituendo /image/upload/ con /raw/upload/
             text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[0] + "_text"
 
             params_text, prompt_text, control_img_tag = "", "", None
-
-            # fetch only the text for the current items
             try:
                 resp = requests.get(text_url, timeout=5)
                 if resp.status_code == 200:
@@ -1709,7 +1679,6 @@ def results():
                     for line in params_text.splitlines():
                         if line.lower().startswith("prompt:"):
                             prompt_text = line
-
                     if params_text:
                         params_text = "\n".join(
                             l for l in params_text.splitlines()
@@ -1718,7 +1687,6 @@ def results():
             except Exception:
                 params_text = ""
 
-            # test control image existence HEAD
             try:
                 h = requests.head(control_url, timeout=4)
                 if h.status_code == 200:
@@ -1727,7 +1695,6 @@ def results():
                 control_img_tag = None
 
             resized_url = url
-
             if not (control_img_tag or params_text or prompt_text):
                 grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
             else:
@@ -1738,36 +1705,30 @@ def results():
                     Div(prompt_text or "", cls="grid-item") if prompt_text else Div("", cls="grid-item"),
                     cls="result-grid"
                 )
-
             grids.append(grid)
-
     except Exception as e:
-        flash(f"Error fetching results: {e}", "error")
+        flash(_("Error fetching results: %(err)s", err=e), "error")
         grids = []
 
-    # Paginazione: Previous e Next
     pagination_children = []
     if page > 1:
         pagination_children.append(
-            A("⬅ Previous", href=url_for("results", model=selected_model, page=page - 1, per_page=per_page),
-              cls="button secondary"))
-
+            A("⬅ " + _("Previous"),
+              href=url_for("results", model=selected_model, page=page - 1, per_page=per_page),
+              cls="button secondary")
+        )
     if next_cursor:
         pagination_children.append(
-            A("Next ➡", href=url_for("results", model=selected_model, page=page + 1, per_page=per_page),
-              cls="button secondary"))
-
+            A(_("Next") + " ➡",
+              href=url_for("results", model=selected_model, page=page + 1, per_page=per_page),
+              cls="button secondary")
+        )
     pagination = Div(*pagination_children, cls="pagination") if pagination_children else ""
 
-    # Selettore modello
-    model_options = [Option("All Models", value="all", selected=(selected_model == "all"))]
+    model_options = [Option(_("All Models"), value="all", selected=(selected_model == "all"))]
     for m in models:
         model_options.append(
-            Option(
-                m["id"].split("/")[-1],
-                value=m["id"],
-                selected=(selected_model == m["id"])
-            )
+            Option(m["id"].split("/")[-1], value=m["id"], selected=(selected_model == m["id"]))
         )
     selector = Form(
         Select(*model_options, name="model", onchange="this.form.submit()", value=selected_model, style="width:100%"),
@@ -1776,13 +1737,12 @@ def results():
     )
 
     content = Div(
-        H1("Model Results", cls="hero-title"),
+        H1(_("Model Results"), cls="hero-title"),
         selector,
         Div(*grids, cls="card-grid"),
         pagination
     )
-
-    return str(base_layout("Results", content)), 200
+    return str(base_layout(_("Results"), content)), 200
 
 ssh_manager = SSHManager(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH)
 #Worker start
