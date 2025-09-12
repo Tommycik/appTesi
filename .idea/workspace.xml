@@ -7,9 +7,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="Aggiunta traduzione automatica">
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="Aggiunta traduzione automatica e sistemate pagine">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/static/css/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/static/css/style.css" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -179,31 +180,7 @@
       <workItem from="1757491572803" duration="1790000" />
       <workItem from="1757538608718" duration="338000" />
       <workItem from="1757605981899" duration="3752000" />
-      <workItem from="1757664464599" duration="4178000" />
-    </task>
-    <task id="LOCAL-00022" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
-      <option name="closed" value="true" />
-      <created>1755510796537</created>
-      <option name="number" value="00022" />
-      <option name="presentableId" value="LOCAL-00022" />
-      <option name="project" value="LOCAL" />
-      <updated>1755510796537</updated>
-    </task>
-    <task id="LOCAL-00023" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
-      <option name="closed" value="true" />
-      <created>1755511400392</created>
-      <option name="number" value="00023" />
-      <option name="presentableId" value="LOCAL-00023" />
-      <option name="project" value="LOCAL" />
-      <updated>1755511400392</updated>
-    </task>
-    <task id="LOCAL-00024" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
-      <option name="closed" value="true" />
-      <created>1755519784011</created>
-      <option name="number" value="00024" />
-      <option name="presentableId" value="LOCAL-00024" />
-      <option name="project" value="LOCAL" />
-      <updated>1755519784011</updated>
+      <workItem from="1757664464599" duration="13861000" />
     </task>
     <task id="LOCAL-00025" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
       <option name="closed" value="true" />
@@ -573,7 +550,31 @@
       <option name="project" value="LOCAL" />
       <updated>1757627380460</updated>
     </task>
-    <option name="localTasksCounter" value="71" />
+    <task id="LOCAL-00071" summary="Aggiunta traduzione automatica e sistemate pagine">
+      <option name="closed" value="true" />
+      <created>1757668755771</created>
+      <option name="number" value="00071" />
+      <option name="presentableId" value="LOCAL-00071" />
+      <option name="project" value="LOCAL" />
+      <updated>1757668755772</updated>
+    </task>
+    <task id="LOCAL-00072" summary="Aggiunta traduzione automatica e sistemate pagine">
+      <option name="closed" value="true" />
+      <created>1757669011951</created>
+      <option name="number" value="00072" />
+      <option name="presentableId" value="LOCAL-00072" />
+      <option name="project" value="LOCAL" />
+      <updated>1757669011951</updated>
+    </task>
+    <task id="LOCAL-00073" summary="Aggiunta traduzione automatica e sistemate pagine">
+      <option name="closed" value="true" />
+      <created>1757683839855</created>
+      <option name="number" value="00073" />
+      <option name="presentableId" value="LOCAL-00073" />
+      <option name="project" value="LOCAL" />
+      <updated>1757683839855</updated>
+    </task>
+    <option name="localTasksCounter" value="74" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -623,11 +624,12 @@
     <MESSAGE value="pulizia codice, mancano tre pagine principali" />
     <MESSAGE value="Log rossis e fallimento, link alla home aggiunto, stile canvas migliorato" />
     <MESSAGE value="Aggiunta traduzione automatica" />
-    <option name="LAST_COMMIT_MESSAGE" value="Aggiunta traduzione automatica" />
+    <MESSAGE value="Aggiunta traduzione automatica e sistemate pagine" />
+    <option name="LAST_COMMIT_MESSAGE" value="Aggiunta traduzione automatica e sistemate pagine" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
-    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1757112470672" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1757690558770" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$testEnv.coverage" NAME="testEnv Coverage Results" MODIFIED="1754212302482" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$Flask__app_py_.coverage" NAME="Flask (app.py) Coverage Results" MODIFIED="1754219779563" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>

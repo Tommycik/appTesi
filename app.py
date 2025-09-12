@@ -29,6 +29,10 @@ app.config['BABEL_DEFAULT_LOCALE'] = 'en'
 app.config['BABEL_TRANSLATION_DIRECTORIES'] = 'translations'
 
 def get_locale():
+    # Use session setting if available
+    if 'lang' in session:
+        return session['lang']
+    # Otherwise use browser preference
     return request.accept_languages.best_match(['en', 'it'])
 
 babel = Babel(app, locale_selector=get_locale)
@@ -491,7 +495,6 @@ def sse_events(job_id):
 
 @app.route('/connect_lambda')
 def connect_lambda():
-    from flask_babel import _
     if not LAMBDA_CLOUD_API_KEY:
         return str(base_layout((_("Error")), P(_("Lambda API key is not configured!")))), 400
 
@@ -539,13 +542,13 @@ def connect_lambda():
         "sudo docker exec controlnet pip install pyyaml huggingface_hub tqdm screen"
     )
     # Step 5: check running
-    status, _ = ssh_manager.run_command("sudo docker inspect -f '{{.State.Running}}' controlnet || echo false")
+    status, tmp = ssh_manager.run_command("sudo docker inspect -f '{{.State.Running}}' controlnet || echo false")
     if "true" not in status.lower():
-        exists, _ = ssh_manager.run_command("sudo docker ps -a --format '{{.Names}}' | grep -w controlnet || true")
+        exists, tmp = ssh_manager.run_command("sudo docker ps -a --format '{{.Names}}' | grep -w controlnet || true")
         if not exists.strip():
             log(_("Container was not created at all."))
         else:
-            logs, _ = ssh_manager.run_command("sudo docker logs controlnet")
+            logs, tmp = ssh_manager.run_command("sudo docker logs controlnet")
             log(_("Container failed to start:") + "\n" + logs)
 
         content = Div(
@@ -590,9 +593,10 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
         nav_links.append(A(_("Connect to Lambda"), href=url_for('connect_lambda'), cls="nav-link"))
 
     navigation = Nav(*nav_links, cls="nav")
+    current_lang = session.get('lang', 'en')
     lang_buttons = Div(
-        A("EN", href=url_for("set_language", lang="en"), cls="button secondary small"),
-        A("IT", href=url_for("set_language", lang="it"), cls="button secondary small"),
+        A("EN", href=url_for("set_language", lang="en"), cls="button secondary small {'active' if current_lang == 'en' else ''}"),
+        A("IT", href=url_for("set_language", lang="it"), cls="button secondary small {'active' if current_lang == 'it' else ''}"),
         cls="lang-toggle"
     )
     scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
@@ -666,8 +670,8 @@ def index():
         )
 
     content = Div(
-        H1(_("Lambda ControlNet App"), cls="hero-title"),
-        P(_("Generate and fine-tune images with ControlNet models running on Lambda Cloud."),
+        H1(_("Flux Designer"), cls="hero-title"),
+        P(_("Generate images and fine-tune models with ControlNet models running on Lambda Cloud."),
           cls="hero-subtitle"),
         Hr(),
         H2(_("Getting Started")),
@@ -842,6 +846,14 @@ def inference():
             P(_("Prompt: %(prompt)s", prompt=prompt)),
             P(_("Job ID: %(jobid)s", jobid=job_id)),
             P(_("Elapsed time"), style="display:none;", id="time"),
+            Div(
+                A(_("Generate another image"),
+                  href=url_for('inference'),
+                  id="inference_link",
+                  cls="button primary",
+                  style="display: none; width: fit-content;"),
+                style="background=none;border:none;box-shadow:none;display:flex;justify-content:center;",
+            ),
             Div(_("Waiting for your turn..."), id="result-section"),
             Script(f"""
                 const status = document.getElementById("job-status");
@@ -855,9 +867,12 @@ def inference():
                     if (data.status === "done") {{
                         status.innerText = "{js_job_done}";
                         if (data.output && data.output.startsWith("http")) {{
-                            result_div.innerHTML = `<img class="generated preview" src="${{data.output}}" style='max-width:100%;height:auto;'/><p><a href="${{data.output}}" target="_blank">{js_open_full}</a></p>`;
+                            result_div.innerHTML = `<img class="generated preview" src="${{data.output}}" 
+                            style='max-width:100%;height:auto;'/><p><a class="button secondary" href="${{
+                            data.output}}" target="_blank">{js_open_full}</a></p>`;
                             time_el.innerHTML = data.elapsed ? `{js_elapsed}`.replace("%(seconds)s", data.elapsed) : "";                       
-                            time_el.style.display = "block";                     
+                            time_el.style.display = "block"; 
+                            document.getElementById("inference_link").style.display = "block";                    
                         }} else {{
                             result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
                             time_el.innerHTML = data.elapsed ? `{js_elapsed}`.replace("%(seconds)s", data.elapsed) : "";                       
@@ -987,7 +1002,7 @@ def inference():
                     
                         canvas.addEventListener("mousemove", function(e) {{
                             if (!drawing) return;
-                            ctx.lineWidth = 5;
+                            ctx.lineWidth = 0.5;
                             ctx.lineCap = "round";
                             ctx.strokeStyle = (tool === "pencil") ? "white" : "black";
                             ctx.lineTo(e.offsetX, e.offsetY);
@@ -1020,7 +1035,33 @@ def inference():
                                 restoreState(redoStack.pop());
                             }}
                         }});
+                        document.getElementById("uploadInput").addEventListener("change", async function (e) {{
+                            const files = e.target.files;
+                            if (!files.length) return;
                     
+                            const model = document.getElementById("model").value;
+                            const formData = new FormData();
+                    
+                            for (let file of files) {{
+                                formData.append("images", file);
+                            }}
+                            formData.append("model", model);
+                    
+                            const response = await fetch("/preprocess_image", {{ method: "POST", body: formData }});
+                            const data = await response.json();
+                    
+                            if (data.status === "ok") {{
+                                const img = new Image();
+                                img.onload = function () {{
+                                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                    window.convertedImage = img;
+                                }};
+                                img.src = data.converted_data_url;
+                            }} else {{
+                                alert("Error: " + data.error);
+                                }}
+                        }});        
                         // Save on submit
                         document.querySelector("form").addEventListener("submit", function () {{
                             const dataURL = canvas.toDataURL("image/png");
@@ -1222,7 +1263,7 @@ def training():
                         result_div.innerHTML = "<pre>" + (data.output || data.message || "") + "</pre>";
                         time_el.innerHTML = data.elapsed ? "{_('Elapsed time:')} " + data.elapsed + " " + "{_('seconds')}" : "";
                         time_el.style.display = "block";
-                        inference_link.style.display = "block";
+                        document.getElementById("inference_link").style.display = "block";
                     }}
                     es.close();
                 }} else if (data.status === "running") {{
