@@ -1594,7 +1594,8 @@ def results():
     if 'results_cursors' not in session:
         session['results_cursors'] = {}
 
-    def fetch_page(prefix, model_key, page_num, per_page, start_cursor=None, filter_repo_image=False):
+    # Page num not used as cloudinary don't use it
+    def fetch_page(prefix, model_key, page_num, per_page, start_cursor = None, filter_repo_image=False):
         collected = []
         cursor = start_cursor
 
@@ -1634,10 +1635,9 @@ def results():
                                       "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id",
                                                                                                            "")]
                     if look_batch:
-                        # There ARE more filtered items beyond this page
                         return collected[:per_page], next_cursor
                     look_cursor = look_res.get("next_cursor")
-                # No more filtered items
+                # No more items
                 return collected[:per_page], None
 
             # If this batch didn't fill the page and there's no cursor, we're out of items
