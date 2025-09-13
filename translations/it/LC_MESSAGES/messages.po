@@ -1,0 +1,293 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: flux-designer\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: app.py
+msgid "Error"
+msgstr "Errore"
+
+msgid "Flux Designer"
+msgstr "Flux Designer"
+
+msgid "Home"
+msgstr "Home"
+
+msgid "Inference"
+msgstr "Inferenza"
+
+msgid "Training"
+msgstr "Addestramento"
+
+msgid "Results"
+msgstr "Risultati"
+
+msgid "Connect to Lambda"
+msgstr "Connetti a Lambda"
+
+msgid "Inference Job Terminated"
+msgstr "Job di inferenza terminato"
+
+msgid "Training Job Terminated"
+msgstr "Job di addestramento terminato"
+
+msgid "Open full resolution"
+msgstr "Apri a piena risoluzione"
+
+msgid "Elapsed time: %(seconds)s seconds"
+msgstr "Tempo trascorso: %(seconds)s secondi"
+
+msgid "Connection lost, retrying..."
+msgstr "Connessione persa, nuovo tentativo..."
+
+msgid "SSH client not connected"
+msgstr "Client SSH non connesso"
+
+msgid "Progress: %(progress)d%%"
+msgstr "Avanzamento: %(progress)d%%"
+
+msgid "Map: %(progress)d%%"
+msgstr "Mappa: %(progress)d%%"
+
+msgid "Fetching files: %(progress)d%%"
+msgstr "Scaricamento file: %(progress)d%%"
+
+msgid "Loading checkpoint: %(progress)d%%"
+msgstr "Caricamento checkpoint: %(progress)d%%"
+
+msgid "Processing Files: %(progress)d%%"
+msgstr "Elaborazione file: %(progress)d%%"
+
+msgid "Work started"
+msgstr "Lavoro iniziato"
+
+msgid "⚠ Connection lost, retrying..."
+msgstr "⚠ Connessione persa, nuovo tentativo..."
+
+msgid "Lambda API key is not configured!"
+msgstr "Chiave API di Lambda non configurata!"
+
+msgid "Lambda instance not found."
+msgstr "Istanza Lambda non trovata."
+
+msgid "Instance not active (status=%(status)s)"
+msgstr "Istanza non attiva (stato=%(status)s)"
+
+msgid "Configuring Docker daemon..."
+msgstr "Configurazione demone Docker..."
+
+msgid "Pulling Docker image %(image)s..."
+msgstr "Scaricamento immagine Docker %(image)s..."
+
+msgid "Removing any old container..."
+msgstr "Rimozione di eventuali vecchi container..."
+
+msgid "Starting new container..."
+msgstr "Avvio nuovo container..."
+
+msgid "Installing extra Python packages"
+msgstr "Installazione pacchetti Python aggiuntivi"
+
+msgid "Container was not created at all."
+msgstr "Il container non è stato creato."
+
+msgid "Container failed to start:"
+msgstr "Avvio del container fallito:"
+
+msgid "Updating repo inside container..."
+msgstr "Aggiornamento repository nel container..."
+
+msgid "Lambda is ready."
+msgstr "Lambda è pronto."
+
+msgid "Connect Lambda Failed"
+msgstr "Connessione a Lambda fallita"
+
+msgid "Connect Lambda Logs"
+msgstr "Log di connessione a Lambda"
+
+msgid "Continue to Home"
+msgstr "Torna alla Home"
+
+msgid "Before using this app, ensure the lambda remote machine is ready."
+msgstr "Prima di usare questa app, assicurati che la macchina remota Lambda sia pronta."
+
+msgid "Connect to Lambda & Pull Docker Image"
+msgstr "Connetti a Lambda e scarica immagine Docker"
+
+msgid "Connecting..."
+msgstr "Connessione..."
+
+msgid "Lambda instance is connected and Docker image is ready."
+msgstr "L’istanza Lambda è connessa e l’immagine Docker è pronta."
+
+msgid "Go to Inference Page"
+msgstr "Vai alla pagina di inferenza"
+
+msgid "Go to Training Page"
+msgstr "Vai alla pagina di addestramento"
+
+msgid "Go to Results Page"
+msgstr "Vai alla pagina dei risultati"
+
+msgid "Getting Started"
+msgstr "Per iniziare"
+
+msgid "Create a Lambda Cloud account & API key."
+msgstr "Crea un account Lambda Cloud e una chiave API."
+
+msgid "Start the Lambda machine and wait until it's started"
+msgstr "Avvia la macchina Lambda e attendi che sia pronta"
+
+msgid "Make sure the Lambda machine IP, Lambda API key and region are set correctly (IP: %(ip)s, Region: %(region)s)."
+msgstr "Assicurati che l’IP della macchina Lambda, la chiave API e la regione siano impostati correttamente (IP: %(ip)s, Regione: %(region)s)."
+
+msgid "Generate images and fine-tune models with ControlNet models running on Lambda Cloud."
+msgstr "Genera immagini e affina i modelli con ControlNet in esecuzione su Lambda Cloud."
+
+msgid "Inference Job Submitted"
+msgstr "Job di inferenza inviato"
+
+msgid "Model: %(model)s"
+msgstr "Modello: %(model)s"
+
+msgid "Prompt: %(prompt)s"
+msgstr "Prompt: %(prompt)s"
+
+msgid "Job ID: %(jobid)s"
+msgstr "ID Job: %(jobid)s"
+
+msgid "Elapsed time"
+msgstr "Tempo trascorso"
+
+msgid "Generate another image"
+msgstr "Genera un'altra immagine"
+
+msgid "Waiting for your turn..."
+msgstr "In attesa del tuo turno..."
+
+msgid "Waiting for Inference"
+msgstr "In attesa di inferenza"
+
+msgid "Model Selection"
+msgstr "Selezione Modello"
+
+msgid "Parameters"
+msgstr "Parametri"
+
+msgid "Scale:"
+msgstr "Scala:"
+
+msgid "Steps:"
+msgstr "Passi:"
+
+msgid "Guidance:"
+msgstr "Guida:"
+
+msgid "Prompt & Control Image"
+msgstr "Prompt & Immagine di controllo"
+
+msgid "Prompt:"
+msgstr "Prompt:"
+
+msgid "Upload Image:"
+msgstr "Carica immagine:"
+
+msgid "Pencil"
+msgstr "Matita"
+
+msgid "Eraser"
+msgstr "Gomma"
+
+msgid "Undo"
+msgstr "Annulla"
+
+msgid "Redo"
+msgstr "Ripeti"
+
+msgid "Clear"
+msgstr "Cancella"
+
+msgid "Run Inference"
+msgstr "Avvia inferenza"
+
+msgid "Training Job Submitted"
+msgstr "Job di addestramento inviato"
+
+msgid "Job ID: %(job_id)s"
+msgstr "ID Job: %(job_id)s"
+
+msgid "Waiting for Training"
+msgstr "In attesa di addestramento"
+
+msgid "Mode"
+msgstr "Modalità"
+
+msgid "Fine-tune existing model"
+msgstr "Affina modello esistente"
+
+msgid "Create new model"
+msgstr "Crea nuovo modello"
+
+msgid "Existing Model:"
+msgstr "Modello esistente:"
+
+msgid "ControlNet Type:"
+msgstr "Tipo di ControlNet:"
+
+msgid "Reuse as ControlNet?"
+msgstr "Riutilizzare come ControlNet?"
+
+msgid "ControlNet Source:"
+msgstr "Sorgente ControlNet:"
+
+msgid "Choose Existing ControlNet:"
+msgstr "Scegli ControlNet esistente:"
+
+msgid "New Model Name:"
+msgstr "Nome nuovo modello:"
+
+msgid "Quantization & Precision"
+msgstr "Quantizzazione e precisione"
+
+msgid "Use N4 Quantization"
+msgstr "Usa quantizzazione N4"
+
+msgid "Mixed Precision"
+msgstr "Precisione mista"
+
+msgid "Training Parameters"
+msgstr "Parametri di addestramento"
+
+msgid "Learning Rate:"
+msgstr "Tasso di apprendimento:"
+
+msgid "Batch Size:"
+msgstr "Dimensione batch:"
+
+msgid "Gradient Accumulation:"
+msgstr "Accumulo gradiente:"
+
+msgid "Resolution:"
+msgstr "Risoluzione:"
+
+msgid "Checkpoint Steps:"
+msgstr "Passi checkpoint:"
+
+msgid "Validation Steps:"
+msgstr "Passi di validazione:"
+
+msgid "Validation"
+msgstr "Validazione"
+
+msgid "Validation Image:"
+msgstr "Immagine di validazione:"
+
+msgid "Prompt"
+msgstr "Prompt"
+
+msgid "Start Training"
+msgstr "Avvia addestramento"

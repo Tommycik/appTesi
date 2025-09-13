@@ -646,7 +646,7 @@ def index():
 
     if not is_connected:
         action_section = Div(
-            P(_("Before using this app, connect to your Lambda Cloud instance and ensure the Docker image is ready.")),
+            P(_("Before using this app, ensure the lambda remote machine is ready.")),
             A(_("Connect to Lambda & Pull Docker Image"),
               id="connectBtn",
               href=url_for('connect_lambda'),
