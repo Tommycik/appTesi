@@ -50,6 +50,7 @@ LAMBDA_INSTANCE_IP = os.getenv('LAMBDA_INSTANCE_IP', "YOUR_LAMBDA_INSTANCE_PUBLI
 LAMBDA_INSTANCE_USER = os.getenv('LAMBDA_INSTANCE_USER', "ubuntu")
 SSH_PRIVATE_KEY_PATH = os.getenv('SSH_PRIVATE_KEY_PATH')
 HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
+WANDB_TOKEN = os.getenv('WANDB_TOKEN')
 DOCKER_IMAGE_NAME = os.getenv('DOCKER_IMAGE_NAME',
                               "your-dockerhub-username/controlnet-generator:latest")  # when docker is ready
 REGION = os.getenv('REGION')
@@ -1203,6 +1204,7 @@ def training():
         cmd = [
             f"sudo docker exec -e PYTHONUNBUFFERED=1 "
             f"-e HUGGINGFACE_TOKEN={shlex.quote(str(HUGGINGFACE_TOKEN or ''))} "
+            f"-e WANDB_TOKEN={shlex.quote(str(WANDB_TOKEN or ''))} "
             f"controlnet python3 -u /workspace/tesiControlNetFlux/Src/scripts/controlnet_training_api.py "
             f"--learning_rate {shlex.quote(str(learning_rate))}",
             f"--steps {shlex.quote(str(steps))}",
