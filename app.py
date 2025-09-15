@@ -1728,7 +1728,7 @@ def results():
             prefix = f"{HF_NAMESPACE}/"
             cursors_for_model = session['results_cursors'].get(prefix, {})
             start_cursor = cursors_for_model.get(str(page-1)) if page > 1 else None
-            items, next_cursor = fetch_page(prefix, prefix, page, per_page, start_cursor=start_cursor, filter_repo_image=True)
+            items, next_cursor = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=True)
             image_resources = items
             session['results_cursors'].setdefault(prefix, {})[str(page)] = next_cursor
         else:
@@ -1736,7 +1736,7 @@ def results():
             prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
             cursors_for_model = session['results_cursors'].get(prefix, {})
             start_cursor = cursors_for_model.get(str(page-1)) if page > 1 else None
-            items, next_cursor = fetch_page(prefix, prefix, page, per_page, start_cursor=start_cursor, filter_repo_image=False)
+            items, next_cursor = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=False)
             image_resources = items
             session['results_cursors'].setdefault(prefix, {})[str(page)] = next_cursor
 
