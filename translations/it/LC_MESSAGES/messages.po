@@ -149,7 +149,7 @@ msgid "Generate images and fine-tune models with ControlNet models running on La
 msgstr "Genera immagini e affina i modelli con ControlNet in esecuzione su Lambda Cloud."
 
 msgid "Inference Job Submitted"
-msgstr "Job di inferenza inviato"
+msgstr "Lavoro di inferenza inviato"
 
 msgid "Model: %(model)s"
 msgstr "Modello: %(model)s"
@@ -158,7 +158,7 @@ msgid "Prompt: %(prompt)s"
 msgstr "Prompt: %(prompt)s"
 
 msgid "Job ID: %(jobid)s"
-msgstr "ID Job: %(jobid)s"
+msgstr "ID Lavoro: %(jobid)s"
 
 msgid "Elapsed time"
 msgstr "Tempo trascorso"
@@ -170,7 +170,7 @@ msgid "Waiting for your turn..."
 msgstr "In attesa del tuo turno..."
 
 msgid "Waiting for Inference"
-msgstr "In attesa di inferenza"
+msgstr "In attesa dell'inferenza"
 
 msgid "Model Selection"
 msgstr "Selezione Modello"
@@ -215,13 +215,13 @@ msgid "Run Inference"
 msgstr "Avvia inferenza"
 
 msgid "Training Job Submitted"
-msgstr "Job di addestramento inviato"
+msgstr "Lavoro di addestramento inviato"
 
 msgid "Job ID: %(job_id)s"
-msgstr "ID Job: %(job_id)s"
+msgstr "ID lavoro: %(job_id)s"
 
 msgid "Waiting for Training"
-msgstr "In attesa di addestramento"
+msgstr "In attesa dell'addestramento"
 
 msgid "Mode"
 msgstr "Modalità"
@@ -269,7 +269,7 @@ msgid "Batch Size:"
 msgstr "Dimensione batch:"
 
 msgid "Gradient Accumulation:"
-msgstr "Accumulo gradiente:"
+msgstr "Accumulo gradienti:"
 
 msgid "Resolution:"
 msgstr "Risoluzione:"

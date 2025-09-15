@@ -1116,13 +1116,7 @@ def training():
 
         if mode == "existing":
             model_id = request.form["existing_model"]
-            #todo commentare
-            default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
-            hub_model_id = validate_model_or_fallback(model_id, default_canny)
-            if hub_model_id != model_id:
-                flash(_("Repo %(repo)s not valid, using default model %(default)s",
-                        repo=model_id, default=default_canny), "error")
-                controlnet_type = "canny"
+            hub_model_id = model_id
 
             reuse = request.form.get("reuse_as_controlnet", "yes")
             if reuse == "yes":
@@ -1722,23 +1716,7 @@ def results():
         cursors[str(page + 1)] = next_cursor
     session.modified = True
 
-    next_cursor = None
     try:
-        if selected_model == "all":
-            prefix = f"{HF_NAMESPACE}/"
-            cursors_for_model = session['results_cursors'].get(prefix, {})
-            start_cursor = cursors_for_model.get(str(page-1)) if page > 1 else None
-            items, next_cursor = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=True)
-            image_resources = items
-            session['results_cursors'].setdefault(prefix, {})[str(page)] = next_cursor
-        else:
-            model_name = selected_model.split("/")[-1]
-            prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
-            cursors_for_model = session['results_cursors'].get(prefix, {})
-            start_cursor = cursors_for_model.get(str(page-1)) if page > 1 else None
-            items, next_cursor = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=False)
-            image_resources = items
-            session['results_cursors'].setdefault(prefix, {})[str(page)] = next_cursor
 
         grids = []
         for r in image_resources:
