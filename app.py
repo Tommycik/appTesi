@@ -115,10 +115,23 @@ def publish(job_id: str, payload: dict):
         # if queue full or consumer gone, ignore
         pass
 
+def load_image_safe(filepath):
+    pil_img = Image.open(filepath)
+    if pil_img.mode == "RGBA":
+        background = Image.new("RGB", pil_img.size, (255, 255, 255))
+        background.paste(pil_img, mask=pil_img.split()[3])
+        pil_img = background
+    else:
+        pil_img = pil_img.convert("RGB")
+    return pil_img
+
 def convert_to_canny(input_path):
-    img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
-    edges = cv2.Canny(img, 100, 200)
-    out_path = input_path.replace(".jpg", "_canny.jpg")
+    pil_img = load_image_safe(input_path)
+    cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+    gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 100, 200)
+    root, _ = os.path.splitext(input_path)
+    out_path = f"{root}_canny.png"  # always save as PNG
     cv2.imwrite(out_path, edges)
     return out_path
 
@@ -923,7 +936,7 @@ def inference():
             Legend(_("Prompt & Control Image")),
             Label(_("Prompt:")), Input(type="text", name="prompt", required=True, cls="input"),
             Label(_("Upload Image:")),
-            Input(type="file", name="images", id="uploadInput", accept="image/*", multiple=True),
+            Input(type="file", name="images", id="uploadInput", accept=".jpg,.jpeg,.png", multiple=True),
             Canvas(id="drawCanvas", width="512", height="512", style="border:1px solid #ccc;"),
             Div(
                 Button(_("Pencil"), type="button", id="pencilBtn", cls="button secondary"),
@@ -1419,7 +1432,7 @@ def training():
         Fieldset(
             Legend(_("Validation")),
             Label(_("Validation Image:")),
-            Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg"),
+            Input(id="validationImage", name="validation_image", type="file", accept=".jpg,.jpeg,.png"),
             Div(Label(_("Prompt:")), Input(id="prompt", name="prompt"), id="promptWrapper", style="display:none;")
         ),
         Button("Start Training", type="submit", cls="button primary"),

@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
 import getopt
-import numpy
 import PIL
 import PIL.Image
 import sys
+import os
 import torch
+import numpy as np
+import PIL.Image
 
 ##########################################################
 
@@ -141,22 +143,32 @@ def estimate(ten_input):
     return netNetwork(ten_input.to(device).view(1, 3, int_height, int_width))[0, :, :, :].cpu()
 
 
-def hed_from_path(input_path, output_path=None):
-    import numpy as np
-    import PIL.Image
+def load_image_safe(path):
+    """Load image safely, handle alpha, ensure RGB."""
+    pil_img = PIL.Image.open(path)
+    if pil_img.mode == "RGBA":
+        background = PIL.Image.new("RGB", pil_img.size, (255, 255, 255))
+        background.paste(pil_img, mask=pil_img.split()[3])
+        pil_img = background
+    else:
+        pil_img = pil_img.convert("RGB")
+    return pil_img
 
-    ten_input = torch.FloatTensor(
-        np.ascontiguousarray(
-            np.array(PIL.Image.open(input_path))[:, :, ::-1]
-            .transpose(2, 0, 1)
-            .astype(np.float32) * (1.0 / 255.0)
-        )
-    )
+def hed_from_path(input_path, output_path=None):
+    pil_img = load_image_safe(input_path)
+
+    np_img = np.array(pil_img).astype(np.float32) / 255.0
+    np_img = np_img[:, :, ::-1].transpose(2, 0, 1)  # RGB→BGR, HWC→CHW
+    ten_input = torch.FloatTensor(np.ascontiguousarray(np_img))
 
     ten_output = estimate(ten_input)
-    output_image = (ten_output.clip(0.0, 1.0).numpy(force=True)
-                    .transpose(1, 2, 0)[:, :, 0] * 255.0).astype(np.uint8)
 
-    output_path = output_path or input_path.replace(".jpg", "_hed.jpg")
-    PIL.Image.fromarray(output_image).save(output_path)
+    out_img = (ten_output.clip(0.0, 1.0).numpy(force=True)
+               .transpose(1, 2, 0)[:, :, 0] * 255.0).astype(np.uint8)
+
+    if not output_path:
+        root, _ = os.path.splitext(input_path)
+        output_path = f"{root}_hed.png"   # consistent PNG output
+
+    PIL.Image.fromarray(out_img).save(output_path)
     return output_path
