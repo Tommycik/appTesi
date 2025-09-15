@@ -120,7 +120,9 @@ header {
   gap: 1.2rem;
   align-items: center;
 }
-
+#end-training {
+  background: none;
+}
 /* Buttons */
 .button {
   display: inline-flex;

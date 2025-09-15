@@ -399,7 +399,7 @@ def flash_html_messages():
     messages_html = []
     for category, message in get_flashed_messages(with_categories=True):
         messages_html.append(
-            Div(message, class_=f"alert alert-{category}")
+            Div(message, class_=f"alert {category}")  # instead of alert-{category}
         )
     if messages_html:
         return Div(*messages_html, class_="messages")
@@ -1116,11 +1116,13 @@ def training():
 
         if mode == "existing":
             model_id = request.form["existing_model"]
+            #todo commentare
             default_canny = "InstantX/FLUX.1-dev-Controlnet-Canny"
             hub_model_id = validate_model_or_fallback(model_id, default_canny)
             if hub_model_id != model_id:
                 flash(_("Repo %(repo)s not valid, using default model %(default)s",
                         repo=model_id, default=default_canny), "error")
+                controlnet_type = "canny"
 
             reuse = request.form.get("reuse_as_controlnet", "yes")
             if reuse == "yes":
@@ -1138,8 +1140,10 @@ def training():
                     if controlnet_model != controlnet_model_tmp:
                         flash(_("Repo %(repo)s not valid, using default model %(default)s",
                                 repo=controlnet_model_tmp, default=default_canny), "error")
+                        controlnet_type = "canny"
                 else:
                     controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
+                    controlnet_type = "canny"
         else:  # new
             new_name = sanitize_text(request.form.get("new_model_name"), "my-default-model")
             hub_model_id = f"{HF_NAMESPACE}/{new_name}"
@@ -1160,8 +1164,10 @@ def training():
                 if controlnet_model != controlnet_model_tmp:
                     flash(_("Repo %(repo)s not valid, using default model %(default)s",
                             repo=controlnet_model_tmp, default=default_canny), "error")
+                    controlnet_type = "canny"
             else:
                 controlnet_model = "InstantX/FLUX.1-dev-Controlnet-Canny"
+                controlnet_type = "canny"
 
         learning_rate = sanitize_number(request.form.get("learning_rate", "2e-6"), 2e-6, False)
         steps = sanitize_number(request.form.get("steps", "500"), 500, True)
@@ -1272,7 +1278,7 @@ def training():
                   cls="button primary",
                   style="display: none; width: fit-content;"),
                 style="background=none;border:none;box-shadow:none;",
-                cls="center-box"
+                cls="center-box", id="end-training"
             ),
             Script(f"""
             const status = document.getElementById("job-status");
@@ -1339,7 +1345,7 @@ def training():
                     "data_train_batch_size": params.get("train_batch_size", 2),
                     "data_learning_rate": params.get("learning_rate", "2e-6"),
                     "data_mixed_precision": params.get("mixed_precision", "fp16"),
-                    "data_gradient_accumulation_steps": params.get("gradient_accumulation_steps", 1),
+                    "data_gradient_accumulation_steps": params.get("gradient_accumulation_steps", 2),
                     "data_resolution": params.get("resolution", 512),
                     "data_checkpointing_steps": params.get("checkpointing_steps", 250),
                     "data_validation_steps": params.get("validation_steps", 125),
@@ -1672,61 +1678,49 @@ def results():
     page = int(request.args.get("page", 1))
     per_page = int(request.args.get("per_page", 4))
 
-    if 'results_cursors' not in session:
-        session['results_cursors'] = {}
+    if "results_cursors" not in session:
+        session["results_cursors"] = {}
 
-    # Page num not used as cloudinary don't use it
-    def fetch_page(prefix, model_key, page_num, per_page, start_cursor = None, filter_repo_image=False):
-        collected = []
-        cursor = start_cursor
+    def fetch_page(prefix, per_page, start_cursor=None, filter_repo_image=False):
+        try:
+            res = resources(
+                type="upload",
+                prefix=prefix,
+                max_results=per_page,
+                next_cursor=start_cursor
+            )
+        except Exception:
+            return [], None
 
-        while True:
-            try:
-                res = resources(type="upload", prefix=prefix, max_results=per_page, next_cursor=cursor)
-            except Exception:
-                return [], None
+        batch = res.get("resources", [])
+        if filter_repo_image:
+            batch = [
+                r for r in batch
+                if "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id", "")
+            ]
 
-            batch = res.get("resources", [])
-            if filter_repo_image:
-                batch = [r for r in batch if
-                         "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id", "")]
+        return batch, res.get("next_cursor")
 
-            for r in batch:
-                if len(collected) < per_page:
-                    collected.append(r)
+    # --- pick prefix depending on model ---
+    if selected_model == "all":
+        prefix = f"{HF_NAMESPACE}/"
+        filter_repo_image = True
+    else:
+        model_name = selected_model.split("/")[-1]
+        prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
+        filter_repo_image = False
 
-            next_cursor = res.get("next_cursor")
+    # --- look up cursor for this page ---
+    cursors = session["results_cursors"].setdefault(prefix, {})
+    start_cursor = cursors.get(str(page)) if page > 1 else None
 
-            # If we've filled the page, decide whether a "Next" truly exists by peeking ahead.
-            if len(collected) >= per_page:
-                if not next_cursor:
-                    return collected[:per_page], None
+    # --- fetch page ---
+    image_resources, next_cursor = fetch_page(prefix, per_page, start_cursor, filter_repo_image)
 
-                # Look ahead to see if at least one more filtered item exists.
-                look_cursor = next_cursor
-                while look_cursor:
-                    try:
-                        look_res = resources(type="upload", prefix=prefix, max_results=per_page,
-                                             next_cursor=look_cursor)
-                    except Exception:
-                        break
-                    look_batch = look_res.get("resources", [])
-                    if filter_repo_image:
-                        look_batch = [r for r in look_batch if
-                                      "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id",
-                                                                                                           "")]
-                    if look_batch:
-                        return collected[:per_page], next_cursor
-                    look_cursor = look_res.get("next_cursor")
-                # No more items
-                return collected[:per_page], None
-
-            # If this batch didn't fill the page and there's no cursor, we're out of items
-            if not next_cursor:
-                return collected, None
-
-            # Otherwise continue fetching until either page is full or no more items
-            cursor = next_cursor
+    # store cursor for the *next* page
+    if next_cursor:
+        cursors[str(page + 1)] = next_cursor
+    session.modified = True
 
     next_cursor = None
     try:
