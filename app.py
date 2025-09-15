@@ -627,7 +627,7 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
         Body(
             Header(H1(_("Flux Designer"), cls="site-title"), navigation, lang_buttons),
             Main(Div(flash_html_messages(), content, id="main_div", cls="container")),
-            Footer(P("© 2025 Lambda ControlNet App")),
+            Footer(P("© 2025 Flux designer")),
             *scripts,
             Script(f"""
                 document.addEventListener("DOMContentLoaded", () => {{
@@ -894,19 +894,17 @@ def inference():
                         }}
                         es.close();
                     }} else if (data.status === "running") {{
-                        let progressSection = "";
+                        let progress_section = "";
                         if (data.progress !== undefined) {{
-                            progressSection = `
+                            progress_section = `
                               <div class="progress-wrapper">
-                                <div class="progress-label">${{data.message || ""}}</div>
                                 <div class="progress-container">
                                   <div class="progress-bar" style="width:${{data.progress}}%;"></div>
                                 </div>
                               </div>
                             `;
                         }}
-                        result_div.innerHTML = progressSection + 
-                            `<pre class="progress-log">${{(data.message || '').slice(-800)}}</pre>`;
+                        result_div.innerHTML = `<pre class="progress-log">${{(data.message || '').slice(-800)}}</pre>` + progress_section;
                     }} else if (data.status === "error") {{
                         result_div.innerHTML = `<p style="color:#f66">{js_error}: ${{data.message || 'unknown'}}</p>`;
                         es.close();
@@ -1294,19 +1292,17 @@ def training():
                     }}
                     es.close();
                 }} else if (data.status === "running") {{
-                    let progressSection = "";
+                    let progress_section = "";
                         if (data.progress !== undefined) {{
-                            progressSection = `
+                            progress_section = `
                               <div class="progress-wrapper">
-                                <div class="progress-label">${{data.message || ""}}</div>
                                 <div class="progress-container">
                                   <div class="progress-bar" style="width:${{data.progress}}%;"></div>
                                 </div>
                               </div>
                             `;
                         }}
-                        result_div.innerHTML = progressSection + 
-                            `<pre class="progress-log">${{(data.message || '').slice(-800)}}</pre>`;
+                        result_div.innerHTML = `<pre class="progress-log">${{(data.message || '').slice(-800)}}</pre>` + progress_section;
                 }} else if (data.status === "error") {{
                     result_div.innerHTML = `<p style="color:#f66">{_('Error')}: ${{data.message || 'unknown'}}</p>`;
                     es.close();
