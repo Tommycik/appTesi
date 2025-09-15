@@ -7,7 +7,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="Aggiunta traduzione automatica e sistemate pagine">
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="Aggiunta compatibilità png">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
@@ -183,15 +183,7 @@
       <workItem from="1757694986262" duration="5000" />
       <workItem from="1757695003469" duration="610000" />
       <workItem from="1757793659156" duration="2547000" />
-      <workItem from="1757803297200" duration="2556000" />
-    </task>
-    <task id="LOCAL-00030" summary="training.js perfezionato">
-      <option name="closed" value="true" />
-      <created>1755794678174</created>
-      <option name="number" value="00030" />
-      <option name="presentableId" value="LOCAL-00030" />
-      <option name="project" value="LOCAL" />
-      <updated>1755794678174</updated>
+      <workItem from="1757803297200" duration="3565000" />
     </task>
     <task id="LOCAL-00031" summary="risolto bug inferenza">
       <option name="closed" value="true" />
@@ -577,7 +569,15 @@
       <option name="project" value="LOCAL" />
       <updated>1757802942311</updated>
     </task>
-    <option name="localTasksCounter" value="79" />
+    <task id="LOCAL-00079" summary="Aggiunta compatibilità png">
+      <option name="closed" value="true" />
+      <created>1757951396257</created>
+      <option name="number" value="00079" />
+      <option name="presentableId" value="LOCAL-00079" />
+      <option name="project" value="LOCAL" />
+      <updated>1757951396257</updated>
+    </task>
+    <option name="localTasksCounter" value="80" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -628,14 +628,15 @@
     <MESSAGE value="Log rossis e fallimento, link alla home aggiunto, stile canvas migliorato" />
     <MESSAGE value="Aggiunta traduzione automatica" />
     <MESSAGE value="Aggiunta traduzione automatica e sistemate pagine" />
-    <option name="LAST_COMMIT_MESSAGE" value="Aggiunta traduzione automatica e sistemate pagine" />
+    <MESSAGE value="Aggiunta compatibilità png" />
+    <option name="LAST_COMMIT_MESSAGE" value="Aggiunta compatibilità png" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/app.py</url>
-          <line>1131</line>
+          <line>1143</line>
           <option name="timeStamp" value="1" />
         </line-breakpoint>
       </breakpoints>

@@ -752,7 +752,7 @@ def preprocess_image():
             return jsonify({"status": "error", "error": _("No valid images were processed.")}), 500
 
         merged_rgb = cv2.cvtColor(merged_image, cv2.COLOR_GRAY2RGB)
-        merged_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}_merged.jpg")
+        merged_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}_merged.png")
         temp_files_to_clean.append(merged_path)
         cv2.imwrite(merged_path, merged_rgb)
 
@@ -894,7 +894,19 @@ def inference():
                         }}
                         es.close();
                     }} else if (data.status === "running") {{
-                        result_div.innerHTML = `<pre class="progress-log">${{(data.message||'').slice(-800)}}</pre>`;
+                        let progressSection = "";
+                        if (data.progress !== undefined) {{
+                            progressSection = `
+                              <div class="progress-wrapper">
+                                <div class="progress-label">${{data.message || ""}}</div>
+                                <div class="progress-container">
+                                  <div class="progress-bar" style="width:${{data.progress}}%;"></div>
+                                </div>
+                              </div>
+                            `;
+                        }}
+                        result_div.innerHTML = progressSection + 
+                            `<pre class="progress-log">${{(data.message || '').slice(-800)}}</pre>`;
                     }} else if (data.status === "error") {{
                         result_div.innerHTML = `<p style="color:#f66">{js_error}: ${{data.message || 'unknown'}}</p>`;
                         es.close();
@@ -1282,7 +1294,19 @@ def training():
                     }}
                     es.close();
                 }} else if (data.status === "running") {{
-                    result_div.innerHTML = `<pre class="progress-log">${{(data.message||'').slice(-800)}}</pre>`;
+                    let progressSection = "";
+                        if (data.progress !== undefined) {{
+                            progressSection = `
+                              <div class="progress-wrapper">
+                                <div class="progress-label">${{data.message || ""}}</div>
+                                <div class="progress-container">
+                                  <div class="progress-bar" style="width:${{data.progress}}%;"></div>
+                                </div>
+                              </div>
+                            `;
+                        }}
+                        result_div.innerHTML = progressSection + 
+                            `<pre class="progress-log">${{(data.message || '').slice(-800)}}</pre>`;
                 }} else if (data.status === "error") {{
                     result_div.innerHTML = `<p style="color:#f66">{_('Error')}: ${{data.message || 'unknown'}}</p>`;
                     es.close();
