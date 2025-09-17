@@ -24,26 +24,12 @@ from werkzeug.utils import secure_filename
 from flask_babel import Babel, _
 
 app = Flask(__name__)
+
 #Automatic translation
 app.config['BABEL_DEFAULT_LOCALE'] = 'en'
 app.config['BABEL_TRANSLATION_DIRECTORIES'] = 'translations'
-
-def get_locale():
-    # Use session setting if available
-    if 'lang' in session:
-        return session['lang']
-    # Otherwise use browser preference
-    return request.accept_languages.best_match(['en', 'it'])
-
-babel = Babel(app, locale_selector=get_locale)
-
-@app.route('/set_lang/<lang>')
-def set_language(lang):
-    if lang in ['en', 'it']:
-        session['lang'] = lang
-    return redirect(request.referrer or url_for('index'))
-
 app.secret_key = os.urandom(12)
+
 LAMBDA_CLOUD_API_BASE = "https://cloud.lambdalabs.com/api/v1/instances"
 LAMBDA_CLOUD_API_KEY = os.getenv('LAMBDA_CLOUD_API_KEY')
 LAMBDA_INSTANCE_IP = os.getenv('LAMBDA_INSTANCE_IP', "YOUR_LAMBDA_INSTANCE_PUBLIC_IP")
@@ -63,6 +49,7 @@ cloudinary.config(
     api_key=CLOUDINARY_API_KEY,
     api_secret=CLOUDINARY_API_SECRET
 )
+
 HF_NAMESPACE = "tommycik"
 api = HfApi()
 os.environ['PYTHONIOENCODING'] = 'utf-8'
@@ -77,7 +64,12 @@ results_lock = threading.Lock()
 # A lock to serialize the SSH command
 worker_lock = threading.Lock()
 
-
+def get_locale():
+    # Use session setting if available
+    if 'lang' in session:
+        return session['lang']
+    # Otherwise use browser preference
+    return request.accept_languages.best_match(['en', 'it'])
 
 def sanitize_number(val, default, force_int=False):
     try:
@@ -380,7 +372,7 @@ class SSHManager:
             errors = "".join(error_chunks) if exit_code != 0 else ""
             return output, errors
 
-    #Wrapper to run a command using Screen
+    # Wrapper to run a command using Screen
     def run_in_screen(self, job_id, command):
         # Start screen session with logging to /tmp/{job_id}.log
         log_cmd = (
@@ -462,7 +454,7 @@ def worker():
                         output += final_out
                         break
                     else:
-                        # screen still alive → retry tail
+                        # screen still alive
                         continue
 
             elapsed = int(time.time() - start_time)
@@ -484,6 +476,78 @@ def worker():
             publish(job_id, {"status": "error", "message": str(e)})
         finally:
             work_queue.task_done()
+
+
+def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
+    cache_buster = int(time.time())
+    is_connected = session.get('lambda_connected', False)
+    nav_links = []
+    # Always show Home if not on index
+    if request.endpoint != 'index':
+        nav_links.append(A(_("Home"), href=url_for('index'), cls="nav-link"))
+
+    if is_connected:
+        nav_links.extend([
+            A(_("Inference"), href=url_for('inference'), cls="nav-link"),
+            A(_("Training"), href=url_for('training'), cls="nav-link"),
+            A(_("Results"), href=url_for('results'), cls="nav-link"),
+        ])
+    else:
+        nav_links.append(A(_("Connect to Lambda"), href=url_for('connect_lambda'), cls="nav-link"))
+
+    navigation = Nav(*nav_links, cls="nav")
+    current_lang = session.get('lang', 'en')
+    lang_buttons = Div(
+        A("EN", href=url_for("set_language", lang="en"),
+          cls="button secondary small {'active' if current_lang == 'en' else ''}"),
+        A("IT", href=url_for("set_language", lang="it"),
+          cls="button secondary small {'active' if current_lang == 'it' else ''}"),
+        cls="lang-toggle"
+    )
+    scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
+    if extra_scripts:
+        scripts.extend([Script(src=url_for('static', filename=path, v=cache_buster)) for path in extra_scripts])
+
+    return Div(
+        Head(
+            Meta(charset="UTF-8"),
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+            Title(f"Flux Designer - {title}"),
+            Link(rel="stylesheet", href=url_for('static', filename='css/style.css', v=cache_buster))
+        ),
+        Body(
+            Header(H1(_("Flux Designer"), cls="site-title"), navigation, lang_buttons),
+            Main(Div(flash_html_messages(), content, id="main_div", cls="container")),
+            Footer(P("© 2025 Flux designer")),
+            *scripts,
+            Script(f"""
+                document.addEventListener("DOMContentLoaded", () => {{
+                  // Possibility to add a toggle for nav
+                  const nav = document.querySelector(".nav");
+                  const toggle = document.getElementById("navToggle");
+                  if (toggle && nav){{
+                    toggle.addEventListener("click", () => nav.classList.toggle("open"));
+                  }}
+
+                  document.querySelectorAll(".messages .alert").forEach(el => {{
+                    setTimeout(() => {{ el.style.transition = "opacity .4s"; el.style.opacity = "0"; }}, 4000);
+                  }});
+
+
+                  if (location.hash){{
+                    const t = document.querySelector(location.hash);
+                    if (t) t.scrollIntoView({{behavior:"smooth", block:"start"}});
+                  }}
+                }});
+            """)
+        )
+    )
+
+@app.route('/set_lang/<lang>')
+def set_language(lang):
+    if lang in ['en', 'it']:
+        session['lang'] = lang
+    return redirect(request.referrer or url_for('index'))
 
 @app.route("/events/<job_id>")
 def sse_events(job_id):
@@ -591,68 +655,7 @@ def connect_lambda():
     )
     return str(base_layout(_("Connect Lambda"), content)), 200
 
-def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
-    cache_buster = int(time.time())
-    is_connected = session.get('lambda_connected', False)
-    nav_links = []
-    # Always show Home if not on index
-    if request.endpoint != 'index':
-        nav_links.append(A(_("Home"), href=url_for('index'), cls="nav-link"))
 
-    if is_connected:
-        nav_links.extend([
-            A(_("Inference"), href=url_for('inference'), cls="nav-link"),
-            A(_("Training"), href=url_for('training'), cls="nav-link"),
-            A(_("Results"), href=url_for('results'), cls="nav-link"),
-        ])
-    else:
-        nav_links.append(A(_("Connect to Lambda"), href=url_for('connect_lambda'), cls="nav-link"))
-
-    navigation = Nav(*nav_links, cls="nav")
-    current_lang = session.get('lang', 'en')
-    lang_buttons = Div(
-        A("EN", href=url_for("set_language", lang="en"), cls="button secondary small {'active' if current_lang == 'en' else ''}"),
-        A("IT", href=url_for("set_language", lang="it"), cls="button secondary small {'active' if current_lang == 'it' else ''}"),
-        cls="lang-toggle"
-    )
-    scripts = [Script(src=url_for('static', filename='js/script.js', v=cache_buster))]
-    if extra_scripts:
-        scripts.extend([Script(src=url_for('static', filename=path, v=cache_buster)) for path in extra_scripts])
-
-    return Div(
-        Head(
-            Meta(charset="UTF-8"),
-            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
-            Title(f"Flux Designer - {title}"),
-            Link(rel="stylesheet", href=url_for('static', filename='css/style.css', v=cache_buster))
-        ),
-        Body(
-            Header(H1(_("Flux Designer"), cls="site-title"), navigation, lang_buttons),
-            Main(Div(flash_html_messages(), content, id="main_div", cls="container")),
-            Footer(P("© 2025 Flux designer")),
-            *scripts,
-            Script(f"""
-                document.addEventListener("DOMContentLoaded", () => {{
-                // Possibility to add a toggle for nav
-                  const nav = document.querySelector(".nav");
-                  const toggle = document.getElementById("navToggle");
-                  if (toggle && nav){{
-                    toggle.addEventListener("click", () => nav.classList.toggle("open"));
-                  }}
-            
-                  document.querySelectorAll(".messages .alert").forEach(el => {{
-                    setTimeout(() => {{ el.style.transition = "opacity .4s"; el.style.opacity = "0"; }}, 4000);
-                  }});
-            
-            
-                  if (location.hash){{
-                    const t = document.querySelector(location.hash);
-                    if (t) t.scrollIntoView({{behavior:"smooth", block:"start"}});
-                  }}
-                }});
-            """)
-        )
-    )
 
 
 @app.route("/")
@@ -1662,7 +1665,6 @@ def training():
     )
     return str(base_layout(_("Training"), form)), 200
 
-
 @app.route('/results', methods=["GET"])
 def results():
     is_connected = session.get('lambda_connected', False)
@@ -1677,7 +1679,7 @@ def results():
     if "results_cursors" not in session:
         session["results_cursors"] = {}
 
-    # --- helper to fetch images from Cloudinary ---
+    # helper to fetch images from Cloudinary
     def fetch_page(prefix, per_page, start_cursor=None, filter_repo_image=False):
         try:
             res = resources(
@@ -1700,7 +1702,7 @@ def results():
 
         return batch, next_cursor
 
-    # --- determine prefix ---
+    # determine prefix
     if selected_model == "all":
         prefix = f"{HF_NAMESPACE}/"
         filter_repo_image = True
@@ -1709,19 +1711,19 @@ def results():
         prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
         filter_repo_image = False
 
-    # --- look up cursor for this page ---
+    # look up cursor for this page
     cursors = session["results_cursors"].setdefault(prefix, {})
     start_cursor = cursors.get(str(page)) if page > 1 else None
 
-    # --- fetch page ---
+    # fetch page
     image_resources, next_cursor = fetch_page(prefix, per_page, start_cursor, filter_repo_image)
 
-    # store cursor for the *next* page
+    # store cursor for the next page
     if next_cursor:
         cursors[str(page + 1)] = next_cursor
     session.modified = True
 
-    # --- build result grids ---
+    # build result grids
     grids = []
     for r in image_resources:
         url = r.get("secure_url")
@@ -1741,8 +1743,8 @@ def results():
                         prompt_text = line
                 if params_text:
                     params_text = "\n".join(
-                        l for l in params_text.splitlines()
-                        if not l.lower().startswith("prompt:")
+                        line for line in params_text.splitlines()
+                        if not line.lower().startswith("prompt:")
                     )
         except Exception:
             params_text = ""
@@ -1767,7 +1769,7 @@ def results():
             )
         grids.append(grid)
 
-    # --- pagination controls ---
+    # pagination controls
     pagination_children = []
     if page > 1:
         pagination_children.append(
@@ -1783,7 +1785,7 @@ def results():
         )
     pagination = Div(*pagination_children, cls="pagination") if pagination_children else ""
 
-    # --- model selector ---
+    # model selector
     model_options = [Option(_("All Models"), value="all", selected=(selected_model == "all"))]
     for m in models:
         model_options.append(
@@ -1807,6 +1809,8 @@ ssh_manager = SSHManager(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_K
 #Worker start
 worker_thread = threading.Thread(target=worker, daemon=True)
 worker_thread.start()
+#Babael
+babel = Babel(app, locale_selector=get_locale)
 
 # main driver function
 if __name__ == '__main__':
