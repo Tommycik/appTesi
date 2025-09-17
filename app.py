@@ -64,6 +64,47 @@ results_lock = threading.Lock()
 # A lock to serialize the SSH command
 worker_lock = threading.Lock()
 
+# Simple in-memory cache for HuggingFace metadata
+cache_store = {
+    "models": {"data": None, "timestamp": 0},
+    "model_info": {}
+}
+CACHE_TTL = 300  # seconds = 5 minutes
+
+def cached_models_list(namespace=HF_NAMESPACE):
+    now = time.time()
+    if (cache_store["models"]["data"] is None or
+        now - cache_store["models"]["timestamp"] > CACHE_TTL):
+        # refresh from HF Hub
+        models = api.list_models(author=namespace)
+        result = []
+        for model in models:
+            try:
+                info = api.model_info(model.modelId)
+                result.append({
+                    "id": model.modelId,
+                    "card_data": info.card_data or {}
+                })
+            except Exception as e:
+                print(f"Skipping {model.modelId}: {e}")
+        cache_store["models"] = {"data": result, "timestamp": now}
+    return cache_store["models"]["data"]
+
+def cached_model_info(model_id):
+    now = time.time()
+    if (model_id not in cache_store["model_info"] or
+        now - cache_store["model_info"][model_id]["timestamp"] > CACHE_TTL):
+        try:
+            yaml_path = hf_hub_download(repo_id=model_id,
+                                        filename="training_config.yaml",
+                                        repo_type="model")
+            with open(yaml_path, "r") as f:
+                params = yaml.safe_load(f)
+        except Exception as e:
+            print(f"No config for {model_id}: {e}")
+            params = {}
+        cache_store["model_info"][model_id] = {"data": params, "timestamp": now}
+    return cache_store["model_info"][model_id]["data"]
 
 def get_locale():
     # Use session setting if available
@@ -797,7 +838,7 @@ def inference():
             flash(_("Repo %(repo)s not valid, using default model %(default)s",
                     repo=model_chosen, default=default_canny), "error")
 
-        params = model_info(model_id)
+        params = cached_model_info(model_id)
         model_type = sanitize_text(params.get("controlnet_type", "canny"), "canny")
         n4 = params.get("N4", False)
         # future possible control
@@ -931,7 +972,7 @@ def inference():
         return str(base_layout(_("Waiting for Inference"), content)), 200
 
     # GET method
-    models = models_list()
+    models = cached_models_list()
     options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
 
     form = Form(
@@ -1329,11 +1370,11 @@ def training():
         return str(base_layout(_("Waiting for Training"), content)), 200
 
     # GET: form
-    models = models_list()
+    models = cached_models_list()
     options = []
     for m in models:
         model_id = m["id"]
-        params = model_info(model_id)
+        params = cached_model_info(model_id)
         options.append(
             Option(
                 model_id.split("/")[-1],
@@ -1672,7 +1713,7 @@ def results():
     if not is_connected:
         return redirect(url_for('index'))
 
-    models = models_list()
+    models = cached_models_list()
     selected_model = request.args.get("model", "all")
     page = int(request.args.get("page", 1))
     per_page = int(request.args.get("per_page", 4))
@@ -1680,7 +1721,7 @@ def results():
     if "results_cursors" not in session:
         session["results_cursors"] = {}
 
-    # --- helper: fetch from Cloudinary (single-page call) ---
+    # fetch from Cloudinary
     def fetch_page(prefix, per_page, start_cursor=None, filter_repo_image=False):
         try:
             res = resources(
@@ -1704,7 +1745,7 @@ def results():
     # next_cursor variable used later to decide whether to show "Next"
     next_cursor = None
 
-    # --- CASE: all models (aggregate and paginate overall) ---
+    # all models
     if selected_model == "all":
         required = page * per_page  # we need at least this many items across all models to render page and know if next exists
         combined = []
@@ -1719,7 +1760,7 @@ def results():
                 continue
             combined.extend(res.get("resources", []))
 
-        # sort combined by created_at if present, otherwise by public_id (desc => newest first)
+        # sort combined by created_at if present, otherwise by public_id
         def sort_key(r):
             # created_at often ISO string; falling back to public_id keeps deterministic ordering
             return r.get("created_at") or r.get("public_id") or ""
@@ -1735,7 +1776,7 @@ def results():
         has_more = len(combined_sorted) > end
         next_cursor = True if has_more else None
 
-    # --- CASE: single model (original behavior, keep cursors) ---
+    #single model
     else:
         model_name = selected_model.split("/")[-1]
         prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
@@ -1751,7 +1792,7 @@ def results():
 
     session.modified = True
 
-    # --- build the exact same grid/card HTML structure you used originally ---
+    # Html
     grids = []
     for r in image_resources:
         url = r.get("secure_url")
@@ -1763,7 +1804,7 @@ def results():
 
         params_text, prompt_text = "", ""
         try:
-            resp = requests.get(text_url, timeout=5)
+            resp = requests.get(text_url, timeout=2)
             if resp.status_code == 200:
                 params_text = resp.text
                 for line in params_text.splitlines():
@@ -1799,7 +1840,7 @@ def results():
             )
         grids.append(grid)
 
-    # --- pagination controls (Previous / Next) ---
+    # pagination controls
     pagination_children = []
     if page > 1:
         pagination_children.append(
@@ -1815,7 +1856,7 @@ def results():
         )
     pagination = Div(*pagination_children, cls="pagination") if pagination_children else ""
 
-    # --- model selector (same markup you had) ---
+    # model selector
     model_options = [Option(_("All Models"), value="all", selected=(selected_model == "all"))]
     for m in models:
         model_options.append(

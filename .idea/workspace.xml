@@ -187,14 +187,7 @@
       <workItem from="1757965558594" duration="9540000" />
       <workItem from="1758012966989" duration="13667000" />
       <workItem from="1758097110544" duration="13933000" />
-    </task>
-    <task id="LOCAL-00042" summary="risolvere problema caricamento multiplo e training">
-      <option name="closed" value="true" />
-      <created>1756571796219</created>
-      <option name="number" value="00042" />
-      <option name="presentableId" value="LOCAL-00042" />
-      <option name="project" value="LOCAL" />
-      <updated>1756571796219</updated>
+      <workItem from="1758141756853" duration="1127000" />
     </task>
     <task id="LOCAL-00043" summary="miglioramento css e results">
       <option name="closed" value="true" />
@@ -580,7 +573,15 @@
       <option name="project" value="LOCAL" />
       <updated>1758109210608</updated>
     </task>
-    <option name="localTasksCounter" value="91" />
+    <task id="LOCAL-00091" summary=" correzione pagina risultati">
+      <option name="closed" value="true" />
+      <created>1758142583677</created>
+      <option name="number" value="00091" />
+      <option name="presentableId" value="LOCAL-00091" />
+      <option name="project" value="LOCAL" />
+      <updated>1758142583677</updated>
+    </task>
+    <option name="localTasksCounter" value="92" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
