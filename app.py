@@ -106,7 +106,7 @@ def as_str(v, default=""):
     return str(v if v is not None else default)
 
 def publish(job_id: str, payload: dict):
-    #Pushing status for SSE consumers
+    # Pushing status for SSE consumers
     with results_lock:
         results_db[job_id] = payload
     try:
@@ -454,14 +454,16 @@ def worker():
                     time.sleep(3)
                     ssh_manager.reconnect_if_needed()
 
-                    # Check if job already finished
-                    still_running, _ = ssh_manager.run_command(f"ps -p {pid} || true")
-                    if "defunct" in still_running or not still_running.strip():
-                        # Fetch remaining logs
+                    # Check if screen is still alive
+                    screen_check, _ = ssh_manager.run_command(f"screen -list | grep {job_id} || true")
+                    if not screen_check.strip():
+                        # screen session is gone, job ended
                         final_out, _ = ssh_manager.run_command(f"cat {log_file} || true")
                         output += final_out
-                        # Exit loop
                         break
+                    else:
+                        # screen still alive → retry tail
+                        continue
 
             elapsed = int(time.time() - start_time)
 
@@ -936,9 +938,9 @@ def inference():
         Fieldset(
             Legend(_("Parameters")),
             Div(
-                Label(_("Scale:")), Input(type="number", name="scale", step="0.1", value="0.2"),
-                Label(_("Steps:")), Input(type="number", name="steps", value="50"),
-                Label(_("Guidance:")), Input(type="number", name="guidance", step="0.5", value="6.0"),
+                Label(_("Scale:")), Input(type="number", name="scale", step="0.1", value="0.7"),
+                Label(_("Steps:")), Input(type="number", name="steps", value="35"),
+                Label(_("Guidance:")), Input(type="number", name="guidance", step="0.5", value="6.5"),
                 cls="form-row"
             )
         ),
@@ -1337,7 +1339,7 @@ def training():
                     "data_N4": as_str(params.get("N4", False), "False"),
                     "data_steps": params.get("steps", 1000),
                     "data_train_batch_size": params.get("train_batch_size", 2),
-                    "data_learning_rate": params.get("learning_rate", "2e-6"),
+                    "data_learning_rate": params.get("learning_rate", "5e-6"),
                     "data_mixed_precision": params.get("mixed_precision", "fp16"),
                     "data_gradient_accumulation_steps": params.get("gradient_accumulation_steps", 2),
                     "data_resolution": params.get("resolution", 512),
@@ -1496,11 +1498,11 @@ def training():
                     canny: {{
                       controlnet_type: "canny",
                       N4: "false",
-                      learning_rate: "2e-6",
+                      learning_rate: "5e-6",
                       steps: 500,
                       train_batch_size: 2,
                       mixed_precision: "bf16",
-                      gradient_accumulation_steps: 1,
+                      gradient_accumulation_steps: 2,
                       resolution: 512,
                       checkpointing_steps: 250,
                       validation_steps: 125
@@ -1508,11 +1510,11 @@ def training():
                     hed: {{
                       controlnet_type: "hed",
                       N4: "false",
-                      learning_rate: "2e-6",
+                      learning_rate: "5e-6",
                       steps: 500,
                       train_batch_size: 2,
                       mixed_precision: "bf16",
-                      gradient_accumulation_steps: 1,
+                      gradient_accumulation_steps: 2,
                       resolution: 512,
                       checkpointing_steps: 250,
                       validation_steps: 125
@@ -1675,6 +1677,7 @@ def results():
     if "results_cursors" not in session:
         session["results_cursors"] = {}
 
+    # --- helper to fetch images from Cloudinary ---
     def fetch_page(prefix, per_page, start_cursor=None, filter_repo_image=False):
         try:
             res = resources(
@@ -1687,15 +1690,17 @@ def results():
             return [], None
 
         batch = res.get("resources", [])
+        next_cursor = res.get("next_cursor")
+
         if filter_repo_image:
             batch = [
                 r for r in batch
-                if "/repo_image/" in r.get("secure_url", "") or "/repo_image/" in r.get("public_id", "")
+                if "repo_image" in r.get("public_id", "") or "repo_image" in r.get("secure_url", "")
             ]
 
-        return batch, res.get("next_cursor")
+        return batch, next_cursor
 
-    # --- pick prefix depending on model ---
+    # --- determine prefix ---
     if selected_model == "all":
         prefix = f"{HF_NAMESPACE}/"
         filter_repo_image = True
@@ -1716,53 +1721,53 @@ def results():
         cursors[str(page + 1)] = next_cursor
     session.modified = True
 
-    try:
+    # --- build result grids ---
+    grids = []
+    for r in image_resources:
+        url = r.get("secure_url")
+        if not url:
+            continue
 
-        grids = []
-        for r in image_resources:
-            url = r.get("secure_url")
-            control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
-            text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[0] + "_text"
+        control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
+        text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[0] + "_text"
 
-            params_text, prompt_text, control_img_tag = "", "", None
-            try:
-                resp = requests.get(text_url, timeout=5)
-                if resp.status_code == 200:
-                    params_text = resp.text
-                    for line in params_text.splitlines():
-                        if line.lower().startswith("prompt:"):
-                            prompt_text = line
-                    if params_text:
-                        params_text = "\n".join(
-                            l for l in params_text.splitlines()
-                            if not l.lower().startswith("prompt:")
-                        )
-            except Exception:
-                params_text = ""
+        params_text, prompt_text, control_img_tag = "", "", None
+        try:
+            resp = requests.get(text_url, timeout=5)
+            if resp.status_code == 200:
+                params_text = resp.text
+                for line in params_text.splitlines():
+                    if line.lower().startswith("prompt:"):
+                        prompt_text = line
+                if params_text:
+                    params_text = "\n".join(
+                        l for l in params_text.splitlines()
+                        if not l.lower().startswith("prompt:")
+                    )
+        except Exception:
+            params_text = ""
 
-            try:
-                h = requests.head(control_url, timeout=4)
-                if h.status_code == 200:
-                    control_img_tag = Img(src=control_url, cls="card-img")
-            except Exception:
-                control_img_tag = None
+        try:
+            h = requests.head(control_url, timeout=4)
+            if h.status_code == 200:
+                control_img_tag = Img(src=control_url, cls="card-img")
+        except Exception:
+            control_img_tag = None
 
-            resized_url = url
-            if not (control_img_tag or params_text or prompt_text):
-                grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
-            else:
-                grid = Div(
-                    Div(Img(src=resized_url, cls="card-img"), cls="grid-item"),
-                    Div(control_img_tag or "", cls="grid-item"),
-                    Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
-                    Div(prompt_text or "", cls="grid-item") if prompt_text else Div("", cls="grid-item"),
-                    cls="result-grid"
-                )
-            grids.append(grid)
-    except Exception as e:
-        flash(_("Error fetching results: %(err)s", err=e), "error")
-        grids = []
+        resized_url = url
+        if not (control_img_tag or params_text or prompt_text):
+            grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
+        else:
+            grid = Div(
+                Div(Img(src=resized_url, cls="card-img"), cls="grid-item"),
+                Div(control_img_tag or "", cls="grid-item"),
+                Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
+                Div(prompt_text or "", cls="grid-item") if prompt_text else Div("", cls="grid-item"),
+                cls="result-grid"
+            )
+        grids.append(grid)
 
+    # --- pagination controls ---
     pagination_children = []
     if page > 1:
         pagination_children.append(
@@ -1778,6 +1783,7 @@ def results():
         )
     pagination = Div(*pagination_children, cls="pagination") if pagination_children else ""
 
+    # --- model selector ---
     model_options = [Option(_("All Models"), value="all", selected=(selected_model == "all"))]
     for m in models:
         model_options.append(

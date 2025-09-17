@@ -144,7 +144,7 @@ def estimate(ten_input):
 
 
 def load_image_safe(path):
-    """Load image safely, handle alpha, ensure RGB."""
+    #Ensures RGB
     pil_img = PIL.Image.open(path)
     if pil_img.mode == "RGBA":
         background = PIL.Image.new("RGB", pil_img.size, (255, 255, 255))
@@ -168,7 +168,8 @@ def hed_from_path(input_path, output_path=None):
 
     if not output_path:
         root, _ = os.path.splitext(input_path)
-        output_path = f"{root}_hed.png"   # consistent PNG output
+        # consistent PNG output
+        output_path = f"{root}_hed.png"
 
     PIL.Image.fromarray(out_img).save(output_path)
     return output_path
