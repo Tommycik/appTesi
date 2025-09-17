@@ -7,7 +7,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="Pulizia codice">
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment=" correzione pagina risultati">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
@@ -186,15 +186,7 @@
       <workItem from="1757803297200" duration="9347000" />
       <workItem from="1757965558594" duration="9540000" />
       <workItem from="1758012966989" duration="13667000" />
-      <workItem from="1758097110544" duration="8684000" />
-    </task>
-    <task id="LOCAL-00041" summary="risolvere problema caricamento multiplo e training">
-      <option name="closed" value="true" />
-      <created>1756406342997</created>
-      <option name="number" value="00041" />
-      <option name="presentableId" value="LOCAL-00041" />
-      <option name="project" value="LOCAL" />
-      <updated>1756406342997</updated>
+      <workItem from="1758097110544" duration="13933000" />
     </task>
     <task id="LOCAL-00042" summary="risolvere problema caricamento multiplo e training">
       <option name="closed" value="true" />
@@ -580,7 +572,15 @@
       <option name="project" value="LOCAL" />
       <updated>1758105104033</updated>
     </task>
-    <option name="localTasksCounter" value="90" />
+    <task id="LOCAL-00090" summary=" correzione pagina risultati">
+      <option name="closed" value="true" />
+      <created>1758109210608</created>
+      <option name="number" value="00090" />
+      <option name="presentableId" value="LOCAL-00090" />
+      <option name="project" value="LOCAL" />
+      <updated>1758109210608</updated>
+    </task>
+    <option name="localTasksCounter" value="91" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -633,11 +633,12 @@
     <MESSAGE value="Aggiunta traduzione automatica e sistemate pagine" />
     <MESSAGE value="Aggiunta compatibilità png" />
     <MESSAGE value="Pulizia codice" />
-    <option name="LAST_COMMIT_MESSAGE" value="Pulizia codice" />
+    <MESSAGE value=" correzione pagina risultati" />
+    <option name="LAST_COMMIT_MESSAGE" value=" correzione pagina risultati" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
-    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1758097400872" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1758120482120" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$testEnv.coverage" NAME="testEnv Coverage Results" MODIFIED="1754212302482" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$Flask__app_py_.coverage" NAME="Flask (app.py) Coverage Results" MODIFIED="1754219779563" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>

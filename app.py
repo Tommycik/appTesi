@@ -64,6 +64,7 @@ results_lock = threading.Lock()
 # A lock to serialize the SSH command
 worker_lock = threading.Lock()
 
+
 def get_locale():
     # Use session setting if available
     if 'lang' in session:
@@ -1679,7 +1680,7 @@ def results():
     if "results_cursors" not in session:
         session["results_cursors"] = {}
 
-    # fetch from Cloudinary
+    # --- helper: fetch from Cloudinary (single-page call) ---
     def fetch_page(prefix, per_page, start_cursor=None, filter_repo_image=False):
         try:
             res = resources(
@@ -1700,49 +1701,63 @@ def results():
 
         return batch, res.get("next_cursor")
 
-    # all models
+    # next_cursor variable used later to decide whether to show "Next"
+    next_cursor = None
+
+    # --- CASE: all models (aggregate and paginate overall) ---
     if selected_model == "all":
-        all_images = []
+        required = page * per_page  # we need at least this many items across all models to render page and know if next exists
+        combined = []
+
+        # fetch up to `required` items from each model (small number unless page is large)
         for m in models:
             model_name = m["id"].split("/")[-1]
             prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
+            try:
+                res = resources(type="upload", prefix=prefix, max_results=required)
+            except Exception:
+                continue
+            combined.extend(res.get("resources", []))
 
-            # cursors for this model
-            cursors = session["results_cursors"].setdefault(prefix, {})
-            start_cursor = cursors.get(str(page-1)) if page > 1 else None
+        # sort combined by created_at if present, otherwise by public_id (desc => newest first)
+        def sort_key(r):
+            # created_at often ISO string; falling back to public_id keeps deterministic ordering
+            return r.get("created_at") or r.get("public_id") or ""
 
-            items, next_cursor = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=False)
-            if next_cursor:
-                cursors[str(page)] = next_cursor
+        combined_sorted = sorted(combined, key=sort_key, reverse=True)
 
-            all_images.extend(items)
+        # slice the requested page
+        start = (page - 1) * per_page
+        end = page * per_page
+        image_resources = combined_sorted[start:end]
 
-        image_resources = all_images
+        # determine whether there are more items overall to enable "Next"
+        has_more = len(combined_sorted) > end
+        next_cursor = True if has_more else None
 
-    # single model
+    # --- CASE: single model (original behavior, keep cursors) ---
     else:
         model_name = selected_model.split("/")[-1]
         prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
-
         cursors = session["results_cursors"].setdefault(prefix, {})
         start_cursor = cursors.get(str(page-1)) if page > 1 else None
 
-        items, next_cursor = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=False)
-        if next_cursor:
-            cursors[str(page)] = next_cursor
+        items, next_cursor_real = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=False)
+        if next_cursor_real:
+            cursors[str(page)] = next_cursor_real
 
         image_resources = items
+        next_cursor = next_cursor_real
 
     session.modified = True
 
-    # build HTML grids with control + text files
+    # --- build the exact same grid/card HTML structure you used originally ---
     grids = []
     for r in image_resources:
         url = r.get("secure_url")
         if not url:
             continue
 
-        # related URLs
         control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
         text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[0] + "_text"
 
@@ -1762,22 +1777,62 @@ def results():
         except Exception:
             params_text = ""
 
-        grids.append(
-            Div(
-                Img(src=url, cls="generated"),
-                Img(src=control_url, cls="control"),
-                Pre(prompt_text, cls="prompt"),
-                Pre(params_text, cls="params"),
-                cls="result-card"
-            )
-        )
+        try:
+            h = requests.head(control_url, timeout=4)
+            if h.status_code == 200:
+                control_img_tag = Img(src=control_url, cls="card-img")
+            else:
+                control_img_tag = None
+        except Exception:
+            control_img_tag = None
 
-    content = Div(
-        H2(_("Results")),
-        Div(*grids, cls="results-grid"),
-        cls="container"
+        resized_url = url
+        if not (control_img_tag or params_text or prompt_text):
+            grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
+        else:
+            grid = Div(
+                Div(Img(src=resized_url, cls="card-img"), cls="grid-item"),
+                Div(control_img_tag or "", cls="grid-item"),
+                Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
+                Div(prompt_text or "", cls="grid-item") if prompt_text else Div("", cls="grid-item"),
+                cls="result-grid"
+            )
+        grids.append(grid)
+
+    # --- pagination controls (Previous / Next) ---
+    pagination_children = []
+    if page > 1:
+        pagination_children.append(
+            A("⬅ " + _("Previous"),
+              href=url_for("results", model=selected_model, page=page - 1, per_page=per_page),
+              cls="button secondary")
+        )
+    if next_cursor:
+        pagination_children.append(
+            A(_("Next") + " ➡",
+              href=url_for("results", model=selected_model, page=page + 1, per_page=per_page),
+              cls="button secondary")
+        )
+    pagination = Div(*pagination_children, cls="pagination") if pagination_children else ""
+
+    # --- model selector (same markup you had) ---
+    model_options = [Option(_("All Models"), value="all", selected=(selected_model == "all"))]
+    for m in models:
+        model_options.append(
+            Option(m["id"].split("/")[-1], value=m["id"], selected=(selected_model == m["id"]))
+        )
+    selector = Form(
+        Select(*model_options, name="model", onchange="this.form.submit()", value=selected_model, style="width:100%"),
+        method="get",
+        style="width:100%; margin-bottom:1rem;"
     )
 
+    content = Div(
+        H1(_("Model Results"), cls="hero-title"),
+        selector,
+        Div(*grids, cls="card-grid"),
+        pagination
+    )
     return str(base_layout(_("Results"), content)), 200
 
 
