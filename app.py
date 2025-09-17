@@ -14,6 +14,10 @@ import numpy as np
 import paramiko
 import requests
 import yaml
+import threading
+import concurrent.futures
+from flask import jsonify
+
 from PIL import Image
 from cloudinary.api import resources
 from dotenv import load_dotenv
@@ -73,10 +77,24 @@ CACHE_TTL = 300  # seconds = 5 minutes
 
 def cached_models_list(namespace=HF_NAMESPACE):
     now = time.time()
-    if (cache_store["models"]["data"] is None or
-        now - cache_store["models"]["timestamp"] > CACHE_TTL):
-        # refresh from HF Hub
-        models = api.list_models(author=namespace)
+    # safe read
+    cached = cache_store["models"].get("data")
+    timestamp = cache_store["models"].get("timestamp", 0)
+    expired = (cached is None or now - timestamp > CACHE_TTL)
+
+    if expired:
+        # if cached return it
+        if cached is not None:
+            refresh_models_async()
+            return cached
+
+        # else load it
+        try:
+            models = api.list_models(author=namespace)
+        except Exception as e:
+            print("HF list_models failed:", e)
+            return cached or []
+
         result = []
         for model in models:
             try:
@@ -88,7 +106,9 @@ def cached_models_list(namespace=HF_NAMESPACE):
             except Exception as e:
                 print(f"Skipping {model.modelId}: {e}")
         cache_store["models"] = {"data": result, "timestamp": now}
-    return cache_store["models"]["data"]
+        return result
+
+    return cached
 
 def cached_model_info(model_id):
     now = time.time()
@@ -105,6 +125,25 @@ def cached_model_info(model_id):
             params = {}
         cache_store["model_info"][model_id] = {"data": params, "timestamp": now}
     return cache_store["model_info"][model_id]["data"]
+
+def refresh_models_async():
+    def task():
+        try:
+            _ = cached_models_list()
+        except Exception as e:
+            print("Background refresh failed:", e)
+    threading.Thread(target=task, daemon=True).start()
+
+
+# download text files in parallel
+def fetch_text(url):
+    try:
+        resp = requests.get(url, timeout=3)
+        if resp.status_code == 200:
+            return resp.text
+    except Exception:
+        return ""
+    return ""
 
 def get_locale():
     # Use session setting if available
@@ -585,6 +624,11 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
         )
     )
 
+@app.route("/model_info/<path:model_id>")
+def model_info(model_id):
+    info = cached_model_info(model_id)
+    return jsonify(info)
+
 @app.route('/set_lang/<lang>')
 def set_language(lang):
     if lang in ['en', 'it']:
@@ -756,7 +800,7 @@ def preprocess_image():
         files = request.files.getlist("images")
         model_id = request.form["model"]
         print(model_id)
-        params = model_info(model_id)
+        params = cached_model_info(model_id)
         controlnet_type = params.get("controlnet_type", "canny")
         merged_image = None
 
@@ -973,7 +1017,7 @@ def inference():
 
     # GET method
     models = cached_models_list()
-    options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
+    options = [Option(m["id"].split("/")[-1], value=m["id"], **{"data-model-id": m["id"]}) for m in models]
 
     form = Form(
         Fieldset(
@@ -1370,26 +1414,45 @@ def training():
         return str(base_layout(_("Waiting for Training"), content)), 200
 
     # GET: form
+    # build options WITHOUT calling cached_model_info for every model
     models = cached_models_list()
     options = []
+
+    # fetch params only for the currently selected model
+    selected_model = request.args.get("model", None)
+    selected_params = None
+    if selected_model:
+        try:
+            selected_params = cached_model_info(selected_model)
+        except Exception:
+            selected_params = {}
+
     for m in models:
         model_id = m["id"]
-        params = cached_model_info(model_id)
+
+        # if this is the currently selected model, use fetched params
+        if selected_params and model_id == selected_model:
+            params_for_option = selected_params
+        else:
+            params_for_option = {}
+
         options.append(
             Option(
                 model_id.split("/")[-1],
                 value=model_id,
                 **{
-                    "data_controlnet_type": params.get("controlnet_type", "canny"),
-                    "data_N4": as_str(params.get("N4", False), "False"),
-                    "data_steps": params.get("steps", 1000),
-                    "data_train_batch_size": params.get("train_batch_size", 2),
-                    "data_learning_rate": params.get("learning_rate", "5e-6"),
-                    "data_mixed_precision": params.get("mixed_precision", "fp16"),
-                    "data_gradient_accumulation_steps": params.get("gradient_accumulation_steps", 2),
-                    "data_resolution": params.get("resolution", 512),
-                    "data_checkpointing_steps": params.get("checkpointing_steps", 250),
-                    "data_validation_steps": params.get("validation_steps", 125),
+                    "data_controlnet_type": params_for_option.get("controlnet_type", "canny"),
+                    "data_N4": as_str(params_for_option.get("N4", False), "False"),
+                    "data_steps": params_for_option.get("steps", 1000),
+                    "data_train_batch_size": params_for_option.get("train_batch_size", 2),
+                    "data_learning_rate": params_for_option.get("learning_rate", "5e-6"),
+                    "data_mixed_precision": params_for_option.get("mixed_precision", "fp16"),
+                    "data_gradient_accumulation_steps": params_for_option.get("gradient_accumulation_steps", 2),
+                    "data_resolution": params_for_option.get("resolution", 512),
+                    "data_checkpointing_steps": params_for_option.get("checkpointing_steps", 250),
+                    "data_validation_steps": params_for_option.get("validation_steps", 125),
+                    # keep explicit model id on the element for JS
+                    "data_model_id": model_id
                 }
             )
         )
@@ -1503,6 +1566,47 @@ def training():
             Div(Label(_("Prompt:")), Input(id="prompt", name="prompt"), id="promptWrapper", style="display:none;")
         ),
         Button("Start Training", type="submit", cls="button primary"),
+        Script("""
+            (function(){
+                async function fetchAndFill(sel){
+                    const id = sel.value;
+                    if(!id) return;
+                    try {
+                        const res = await fetch(`/model_info/${encodeURIComponent(id)}`);
+                        if(!res.ok) return;
+                        const info = await res.json();
+        
+                        
+                        const setVal = (id, v) => { const el=document.getElementById(id); if(el && v !== undefined) el.value=v; };
+                        setVal("controlnet_type", info.controlnet_type || "canny");
+                        setVal("steps", info.steps || 500);
+                        setVal("train_batch_size", info.train_batch_size || 2);
+                        setVal("learning_rate", info.learning_rate || "5e-6");
+                        setVal("gradient_accumulation_steps", info.gradient_accumulation_steps || 2);
+                        setVal("resolution", info.resolution || 512);
+                        setVal("checkpointing_steps", info.checkpointing_steps || 250);
+                        setVal("validation_steps", info.validation_steps || 125);
+                    } catch(e){
+                        console.log("fetch model info failed", e);
+                    }
+                }
+        
+                const existing_sel = document.getElementById("existingModel");
+                const controlnet_sel = document.getElementById("existingControlnetModel_existing");
+                const new_controlnet_sel = document.getElementById("existingControlnetModel");
+        
+                if(existing_sel){
+                    existing_sel.addEventListener("change", ()=>fetchAndFill(existing_sel));
+                    if(existing_sel.value) fetchAndFill(existing_sel);
+                }
+                if(controlnet_sel){
+                    controlnet_sel.addEventListener("change", ()=>fetchAndFill(controlnet_sel));
+                }
+                if(new_controlnet_sel){
+                    new_controlnet_sel.addEventListener("change", ()=>fetchAndFill(new_controlnet_sel));
+                }
+            })();
+            """),
         Script(f"""
             (function(){{
                   function san(el, d, asInt){{
@@ -1792,36 +1896,38 @@ def results():
 
     session.modified = True
 
+    text_urls = [
+        r.get("secure_url").replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".",
+                                                                                                                    1)[
+            0] + "_text"
+        for r in image_resources if r.get("secure_url")
+    ]
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        texts = list(pool.map(fetch_text, text_urls))
+
     # Html
     grids = []
-    for r in image_resources:
+    for r, params_text in zip(image_resources, texts):
         url = r.get("secure_url")
         if not url:
             continue
 
         control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
-        text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[0] + "_text"
 
-        params_text, prompt_text = "", ""
-        try:
-            resp = requests.get(text_url, timeout=2)
-            if resp.status_code == 200:
-                params_text = resp.text
-                for line in params_text.splitlines():
-                    if line.lower().startswith("prompt:"):
-                        prompt_text = line
-                if params_text:
-                    params_text = "\n".join(
-                        line for line in params_text.splitlines()
-                        if not line.lower().startswith("prompt:")
-                    )
-        except Exception:
-            params_text = ""
+        prompt_text = ""
+        if params_text:
+            for line in params_text.splitlines():
+                if line.lower().startswith("prompt:"):
+                    prompt_text = line
+            params_text = "\n".join(
+                line for line in params_text.splitlines()
+                if not line.lower().startswith("prompt:")
+            )
 
         try:
             h = requests.head(control_url, timeout=4)
             if h.status_code == 200:
-                control_img_tag = Img(src=control_url, cls="card-img")
+                control_img_tag = Img(src=control_url, cls="card-img", loading="lazy")
             else:
                 control_img_tag = None
         except Exception:
@@ -1829,10 +1935,10 @@ def results():
 
         resized_url = url
         if not (control_img_tag or params_text or prompt_text):
-            grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
+            grid = Div(Div(Img(src=resized_url, cls="card-img", loading="lazy"), cls="grid-item full"), cls="result-grid")
         else:
             grid = Div(
-                Div(Img(src=resized_url, cls="card-img"), cls="grid-item"),
+                Div(Img(src=resized_url, cls="card-img", loading="lazy"), cls="grid-item"),
                 Div(control_img_tag or "", cls="grid-item"),
                 Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
                 Div(prompt_text or "", cls="grid-item") if prompt_text else Div("", cls="grid-item"),
