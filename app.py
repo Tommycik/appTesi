@@ -1679,7 +1679,7 @@ def results():
     if "results_cursors" not in session:
         session["results_cursors"] = {}
 
-    # helper to fetch images from Cloudinary
+    # fetch from Cloudinary
     def fetch_page(prefix, per_page, start_cursor=None, filter_repo_image=False):
         try:
             res = resources(
@@ -1692,48 +1692,61 @@ def results():
             return [], None
 
         batch = res.get("resources", [])
-        next_cursor = res.get("next_cursor")
-
         if filter_repo_image:
             batch = [
                 r for r in batch
                 if "repo_image" in r.get("public_id", "") or "repo_image" in r.get("secure_url", "")
             ]
 
-        return batch, next_cursor
+        return batch, res.get("next_cursor")
 
-    # determine prefix
+    # all models
     if selected_model == "all":
-        prefix = f"{HF_NAMESPACE}/"
-        filter_repo_image = True
+        all_images = []
+        for m in models:
+            model_name = m["id"].split("/")[-1]
+            prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
+
+            # cursors for this model
+            cursors = session["results_cursors"].setdefault(prefix, {})
+            start_cursor = cursors.get(str(page-1)) if page > 1 else None
+
+            items, next_cursor = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=False)
+            if next_cursor:
+                cursors[str(page)] = next_cursor
+
+            all_images.extend(items)
+
+        image_resources = all_images
+
+    # single model
     else:
         model_name = selected_model.split("/")[-1]
         prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
-        filter_repo_image = False
 
-    # look up cursor for this page
-    cursors = session["results_cursors"].setdefault(prefix, {})
-    start_cursor = cursors.get(str(page)) if page > 1 else None
+        cursors = session["results_cursors"].setdefault(prefix, {})
+        start_cursor = cursors.get(str(page-1)) if page > 1 else None
 
-    # fetch page
-    image_resources, next_cursor = fetch_page(prefix, per_page, start_cursor, filter_repo_image)
+        items, next_cursor = fetch_page(prefix, per_page, start_cursor=start_cursor, filter_repo_image=False)
+        if next_cursor:
+            cursors[str(page)] = next_cursor
 
-    # store cursor for the next page
-    if next_cursor:
-        cursors[str(page + 1)] = next_cursor
+        image_resources = items
+
     session.modified = True
 
-    # build result grids
+    # build HTML grids with control + text files
     grids = []
     for r in image_resources:
         url = r.get("secure_url")
         if not url:
             continue
 
+        # related URLs
         control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
         text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[0] + "_text"
 
-        params_text, prompt_text, control_img_tag = "", "", None
+        params_text, prompt_text = "", ""
         try:
             resp = requests.get(text_url, timeout=5)
             if resp.status_code == 200:
@@ -1749,61 +1762,24 @@ def results():
         except Exception:
             params_text = ""
 
-        try:
-            h = requests.head(control_url, timeout=4)
-            if h.status_code == 200:
-                control_img_tag = Img(src=control_url, cls="card-img")
-        except Exception:
-            control_img_tag = None
-
-        resized_url = url
-        if not (control_img_tag or params_text or prompt_text):
-            grid = Div(Div(Img(src=resized_url, cls="card-img"), cls="grid-item full"), cls="result-grid")
-        else:
-            grid = Div(
-                Div(Img(src=resized_url, cls="card-img"), cls="grid-item"),
-                Div(control_img_tag or "", cls="grid-item"),
-                Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
-                Div(prompt_text or "", cls="grid-item") if prompt_text else Div("", cls="grid-item"),
-                cls="result-grid"
+        grids.append(
+            Div(
+                Img(src=url, cls="generated"),
+                Img(src=control_url, cls="control"),
+                Pre(prompt_text, cls="prompt"),
+                Pre(params_text, cls="params"),
+                cls="result-card"
             )
-        grids.append(grid)
-
-    # pagination controls
-    pagination_children = []
-    if page > 1:
-        pagination_children.append(
-            A("⬅ " + _("Previous"),
-              href=url_for("results", model=selected_model, page=page - 1, per_page=per_page),
-              cls="button secondary")
         )
-    if next_cursor:
-        pagination_children.append(
-            A(_("Next") + " ➡",
-              href=url_for("results", model=selected_model, page=page + 1, per_page=per_page),
-              cls="button secondary")
-        )
-    pagination = Div(*pagination_children, cls="pagination") if pagination_children else ""
-
-    # model selector
-    model_options = [Option(_("All Models"), value="all", selected=(selected_model == "all"))]
-    for m in models:
-        model_options.append(
-            Option(m["id"].split("/")[-1], value=m["id"], selected=(selected_model == m["id"]))
-        )
-    selector = Form(
-        Select(*model_options, name="model", onchange="this.form.submit()", value=selected_model, style="width:100%"),
-        method="get",
-        style="width:100%; margin-bottom:1rem;"
-    )
 
     content = Div(
-        H1(_("Model Results"), cls="hero-title"),
-        selector,
-        Div(*grids, cls="card-grid"),
-        pagination
+        H2(_("Results")),
+        Div(*grids, cls="results-grid"),
+        cls="container"
     )
+
     return str(base_layout(_("Results"), content)), 200
+
 
 ssh_manager = SSHManager(LAMBDA_INSTANCE_IP, LAMBDA_INSTANCE_USER, SSH_PRIVATE_KEY_PATH)
 #Worker start
