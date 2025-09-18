@@ -4,6 +4,7 @@ import tempfile
 import threading
 import time
 import uuid
+from functools import wraps
 from io import BytesIO
 from scp import SCPClient
 import json
@@ -16,6 +17,7 @@ import requests
 import yaml
 import threading
 import concurrent.futures
+
 from flask import jsonify
 
 from PIL import Image
@@ -26,11 +28,12 @@ from flask import Flask, url_for, request, redirect, flash, session, get_flashed
 from huggingface_hub import HfApi, hf_hub_download
 from werkzeug.utils import secure_filename
 from flask_babel import Babel, _
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 app = Flask(__name__)
 
 #Automatic translation
 app.config['BABEL_DEFAULT_LOCALE'] = 'en'
+app.config["LAMBDA_CONNECTED"] = False
 app.config['BABEL_TRANSLATION_DIRECTORIES'] = 'translations'
 app.secret_key = os.urandom(12)
 
@@ -488,6 +491,25 @@ def worker():
         command = job['command']
 
         try:
+            # check if remote machine is alive
+            try:
+                out, _ = ssh_manager.run_command("echo ok", timeout=5)
+                if "ok" not in out:
+                    raise RuntimeError("Remote machine check failed")
+            except Exception as e:
+                print(f"[{time.ctime()}] Worker: Remote machine not reachable: {e}")
+                publish(job_id, {"status": "error", "message": "Remote machine is unavailable"})
+                # Mark disconnected (shared flag or session)
+                try:
+                    session["lambda_connected"] = False
+                except Exception:
+                    # session may not be available in worker thread
+                    app.config["LAMBDA_CONNECTED"] = False
+                work_queue.task_done()
+                continue  # skip this job and go back to loop
+
+            print(f"[{time.ctime()}] Worker: Starting job {job_id}")
+
             print(f"[{time.ctime()}] Worker: Starting job {job_id}")
             # ensure container is running
             status_cmd = "sudo docker inspect -f '{{.State.Running}}' controlnet 2>/dev/null || echo false"
@@ -525,7 +547,18 @@ def worker():
                     print(f"[{time.ctime()}] Worker: Lost connection for job {job_id}: {e}")
                     publish(job_id, {"status": "running", "message": "⚠ Connection lost, retrying..."})
                     time.sleep(3)
-                    ssh_manager.reconnect_if_needed()
+                    # check remote machine
+                    try:
+                        ssh_manager.reconnect_if_needed()
+                        ssh_manager.run_command("echo ok", timeout=5)
+                    except Exception as re:
+                        print(f"[{time.ctime()}] Worker: Remote machine is gone: {re}")
+                        publish(job_id, {"status": "error", "message": "Remote machine disconnected"})
+                        try:
+                            session["lambda_connected"] = False
+                        except Exception:
+                            app.config["LAMBDA_CONNECTED"] = False
+                        break
 
                     # Check if screen is still alive
                     screen_check, _ = ssh_manager.run_command(f"screen -list | grep {job_id} || true")
@@ -623,6 +656,15 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             """)
         )
     )
+
+def require_lambda(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not app.config.get("LAMBDA_CONNECTED", False):
+            session["lambda_connected"] = False
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return wrapper
 
 @app.route("/model_info/<path:model_id>")
 def model_info(model_id):
@@ -732,6 +774,7 @@ def connect_lambda():
     )
 
     session['lambda_connected'] = True
+    app.config["LAMBDA_CONNECTED"] = True
     log(_("Lambda is ready."))
 
     content = Div(
@@ -865,6 +908,7 @@ def preprocess_image():
 
 
 @app.route('/inference', methods=["GET", "POST"])
+@require_lambda
 def inference():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
@@ -1018,7 +1062,8 @@ def inference():
     # GET method
     models = cached_models_list()
     options = [Option(m["id"].split("/")[-1], value=m["id"], **{"data-model-id": m["id"]}) for m in models]
-
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(cached_model_info, m["id"]): m["id"] for m in models}
     form = Form(
         Fieldset(
             Legend(_("Model Selection")),
@@ -1193,6 +1238,7 @@ def inference():
     return str(base_layout(_("Inference"), form)), 200
 
 @app.route('/training', methods=["GET", "POST"])
+@require_lambda
 def training():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
@@ -1420,21 +1466,26 @@ def training():
 
     # fetch params only for the currently selected model
     selected_model = request.args.get("model", None)
-    selected_params = None
-    if selected_model:
+
+    # Parallel fetch params for all models
+    def get_info(model_id):
         try:
-            selected_params = cached_model_info(selected_model)
+            return model_id, cached_model_info(model_id)
         except Exception:
-            selected_params = {}
+            return model_id, {}
+
+    params_map = {}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(get_info, m["id"]): m["id"] for m in models}
+        for f in as_completed(futures):
+            model_id, params = f.result()
+            params_map[model_id] = params
 
     for m in models:
         model_id = m["id"]
 
         # if this is the currently selected model, use fetched params
-        if selected_params and model_id == selected_model:
-            params_for_option = selected_params
-        else:
-            params_for_option = {}
+        params_for_option = params_map.get(model_id, {})
 
         options.append(
             Option(
@@ -1812,6 +1863,7 @@ def training():
     return str(base_layout(_("Training"), form)), 200
 
 @app.route('/results', methods=["GET"])
+@require_lambda
 def results():
     is_connected = session.get('lambda_connected', False)
     if not is_connected:
@@ -1896,56 +1948,59 @@ def results():
 
     session.modified = True
 
-    text_urls = [
-        r.get("secure_url").replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".",
-                                                                                                                    1)[
-            0] + "_text"
-        for r in image_resources if r.get("secure_url")
-    ]
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        texts = list(pool.map(fetch_text, text_urls))
-
     # Html
     grids = []
-    for r, params_text in zip(image_resources, texts):
+    def process_resource(r):
         url = r.get("secure_url")
         if not url:
-            continue
+            return None
 
         control_url = url.replace("/repo_image/", "/repo_control/").rsplit(".", 1)[0] + "_control.jpg"
+        text_url = url.replace("/image/upload/", "/raw/upload/").replace("/repo_image/", "/repo_text/").rsplit(".", 1)[0] + "_text"
 
-        prompt_text = ""
-        if params_text:
-            for line in params_text.splitlines():
-                if line.lower().startswith("prompt:"):
-                    prompt_text = line
-            params_text = "\n".join(
-                line for line in params_text.splitlines()
-                if not line.lower().startswith("prompt:")
-            )
+        params_text, prompt_text, control_img_tag = "", "", None
+
+        try:
+            resp = requests.get(text_url, timeout=5)
+            if resp.status_code == 200:
+                params_text = resp.text
+                for line in params_text.splitlines():
+                    if line.lower().startswith("prompt:"):
+                        prompt_text = line
+                params_text = "\n".join(
+                    line for line in params_text.splitlines()
+                    if not line.lower().startswith("prompt:")
+                )
+        except Exception:
+            pass
 
         try:
             h = requests.head(control_url, timeout=4)
             if h.status_code == 200:
-                control_img_tag = Img(src=control_url, cls="card-img", loading="lazy")
-            else:
-                control_img_tag = None
+                control_img_tag = Img(src=control_url, cls="card-img")
         except Exception:
-            control_img_tag = None
+            pass
 
-        resized_url = url
         if not (control_img_tag or params_text or prompt_text):
-            grid = Div(Div(Img(src=resized_url, cls="card-img", loading="lazy"), cls="grid-item full"), cls="result-grid")
+            grid = Div(Div(Img(src=url, cls="card-img"), cls="grid-item full"), cls="result-grid")
         else:
             grid = Div(
-                Div(Img(src=resized_url, cls="card-img", loading="lazy"), cls="grid-item"),
+                Div(Img(src=url, cls="card-img"), cls="grid-item"),
                 Div(control_img_tag or "", cls="grid-item"),
                 Div(Pre(params_text), cls="grid-item") if params_text else Div("", cls="grid-item"),
                 Div(prompt_text or "", cls="grid-item") if prompt_text else Div("", cls="grid-item"),
                 cls="result-grid"
             )
-        grids.append(grid)
+        return grid
 
+    #parallel downlaod
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(process_resource, r) for r in image_resources]
+        for f in as_completed(futures):
+            grid = f.result()
+            if grid:
+                grids.append(grid)
     # pagination controls
     pagination_children = []
     if page > 1:
