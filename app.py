@@ -579,12 +579,7 @@ def worker():
             elapsed = int(time.time() - start_time)
 
             # Detect final outputs
-            url_match = None
-            for m in re.finditer(r'(https?://\S+)', output):
-                url = m.group(0)
-                if "wandb.ai" not in url:  # ignore W&B tracking links
-                    url_match = url
-                    break
+            url_match = re.search(r'https?://(?![\w.-]*wandb\.ai)\S+', output)
             finished_match = re.search(r"_complete\b", output, re.IGNORECASE)
             if url_match:
                 publish(job_id, {"status": "done", "output": url_match.group(0), "elapsed": elapsed})
