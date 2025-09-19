@@ -1426,6 +1426,7 @@ def training():
                 style="background=none;border:none;box-shadow:none;",
                 cls="center-box", id="end-training"
             ),
+            #todo aggiungere a traduzione failed e go to training
             Script(f"""
             const status = document.getElementById("job-status");
             const result_div = document.getElementById("result-section");
@@ -1456,7 +1457,11 @@ def training():
                         }}
                         result_div.innerHTML = `<pre class="progress-log">${{(data.message || '').slice(-800)}}</pre>` + progress_section;
                 }} else if (data.status === "error") {{
+                
+                    status.innerText = "{_('Training Job Failed')}";
                     result_div.innerHTML = `<p style="color:#f66">{_('Error')}: ${{data.message || 'unknown'}}</p>`;
+                    document.getElementById("inference_link").style.display = "block";
+                    document.getElementById("inference_link").innerHTML = "{_('Go to training')} ";
                     es.close();
                 }}
               }};
