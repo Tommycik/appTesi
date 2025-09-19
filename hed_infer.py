@@ -164,7 +164,10 @@ def hed_from_path(input_path, output_path=None):
     ten_output = estimate(ten_input)
 
     out_img = (ten_output.clip(0.0, 1.0).numpy(force=True)
-               .transpose(1, 2, 0)[:, :, 0] * 255.0).astype(np.uint8)
+               .transpose(1, 2, 0) * 255.0).astype(np.uint8)
+
+    # Ensure 3 channels (RGB)
+    out_img = np.repeat(out_img, 3, axis=2)
 
     if not output_path:
         root, _ = os.path.splitext(input_path)
