@@ -17,7 +17,7 @@ import requests
 import yaml
 import threading
 import concurrent.futures
-
+import re
 from flask import jsonify
 
 from PIL import Image
@@ -216,6 +216,17 @@ def convert_to_hed(input_path):
     from hed_infer import hed_from_path
     return hed_from_path(input_path)
 
+
+def validate_repo_name(name: str) -> bool:
+    if not name:
+        return False
+    if not re.match(r"^[A-Za-z0-9._-]+$", name):
+        return False
+    if name.startswith(("-", ".")) or name.endswith(("-", ".")):
+        return False
+    if "--" in name or ".." in name:
+        return False
+    return True
 
 def models_list(namespace=HF_NAMESPACE):
     models = api.list_models(author=namespace)
@@ -493,18 +504,15 @@ def worker():
         try:
             # check if remote machine is alive
             try:
-                out, _ = ssh_manager.run_command("echo ok", timeout=5)
+                out, _ = ssh_manager.run_command("echo ok")
                 if "ok" not in out:
                     raise RuntimeError("Remote machine check failed")
             except Exception as e:
                 print(f"[{time.ctime()}] Worker: Remote machine not reachable: {e}")
                 publish(job_id, {"status": "error", "message": "Remote machine is unavailable"})
                 # Mark disconnected (shared flag or session)
-                try:
-                    session["lambda_connected"] = False
-                except Exception:
-                    # session may not be available in worker thread
-                    app.config["LAMBDA_CONNECTED"] = False
+
+                app.config["LAMBDA_CONNECTED"] = False
                 work_queue.task_done()
                 continue  # skip this job and go back to loop
 
@@ -550,14 +558,11 @@ def worker():
                     # check remote machine
                     try:
                         ssh_manager.reconnect_if_needed()
-                        ssh_manager.run_command("echo ok", timeout=5)
-                    except Exception as re:
+                        ssh_manager.run_command("echo ok")
+                    except Exception as e:
                         print(f"[{time.ctime()}] Worker: Remote machine is gone: {re}")
                         publish(job_id, {"status": "error", "message": "Remote machine disconnected"})
-                        try:
-                            session["lambda_connected"] = False
-                        except Exception:
-                            app.config["LAMBDA_CONNECTED"] = False
+                        app.config["LAMBDA_CONNECTED"] = False
                         break
 
                     # Check if screen is still alive
@@ -574,7 +579,12 @@ def worker():
             elapsed = int(time.time() - start_time)
 
             # Detect final outputs
-            url_match = re.search(r'(https?://\S+)', output)
+            url_match = None
+            for m in re.finditer(r'(https?://\S+)', output):
+                url = m.group(0)
+                if "wandb.ai" not in url:  # ignore W&B tracking links
+                    url_match = url
+                    break
             finished_match = re.search(r"_complete\b", output, re.IGNORECASE)
             if url_match:
                 publish(job_id, {"status": "done", "output": url_match.group(0), "elapsed": elapsed})
@@ -1061,9 +1071,8 @@ def inference():
 
     # GET method
     models = cached_models_list()
-    options = [Option(m["id"].split("/")[-1], value=m["id"], **{"data-model-id": m["id"]}) for m in models]
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(cached_model_info, m["id"]): m["id"] for m in models}
+    options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
+
     form = Form(
         Fieldset(
             Legend(_("Model Selection")),
@@ -1277,6 +1286,12 @@ def training():
                     controlnet_type = "canny"
         else:  # new
             new_name = sanitize_text(request.form.get("new_model_name"), "my-default-model")
+            if not validate_repo_name(new_name):
+                #todo aggiungere a file traduzione
+                flash(
+                    _("Invalid repo name: must use only alphanumeric, '-', '_' or '.' (no '--'/'..', cannot start/end with '-' or '.')"),
+                    "error")
+                return redirect(url_for("training"))
             hub_model_id = f"{HF_NAMESPACE}/{new_name}"
             existing = [m["id"] for m in models_list()]
             if hub_model_id in existing:
@@ -1460,53 +1475,10 @@ def training():
         return str(base_layout(_("Waiting for Training"), content)), 200
 
     # GET: form
-    # build options WITHOUT calling cached_model_info for every model
+    # build options WITHOUT calling cached_model_info for every model, lazy download
+
     models = cached_models_list()
-    options = []
-
-    # fetch params only for the currently selected model
-    selected_model = request.args.get("model", None)
-
-    # Parallel fetch params for all models
-    def get_info(model_id):
-        try:
-            return model_id, cached_model_info(model_id)
-        except Exception:
-            return model_id, {}
-
-    params_map = {}
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(get_info, m["id"]): m["id"] for m in models}
-        for f in as_completed(futures):
-            model_id, params = f.result()
-            params_map[model_id] = params
-
-    for m in models:
-        model_id = m["id"]
-
-        # if this is the currently selected model, use fetched params
-        params_for_option = params_map.get(model_id, {})
-
-        options.append(
-            Option(
-                model_id.split("/")[-1],
-                value=model_id,
-                **{
-                    "data_controlnet_type": params_for_option.get("controlnet_type", "canny"),
-                    "data_N4": as_str(params_for_option.get("N4", False), "False"),
-                    "data_steps": params_for_option.get("steps", 1000),
-                    "data_train_batch_size": params_for_option.get("train_batch_size", 2),
-                    "data_learning_rate": params_for_option.get("learning_rate", "5e-6"),
-                    "data_mixed_precision": params_for_option.get("mixed_precision", "fp16"),
-                    "data_gradient_accumulation_steps": params_for_option.get("gradient_accumulation_steps", 2),
-                    "data_resolution": params_for_option.get("resolution", 512),
-                    "data_checkpointing_steps": params_for_option.get("checkpointing_steps", 250),
-                    "data_validation_steps": params_for_option.get("validation_steps", 125),
-                    # keep explicit model id on the element for JS
-                    "data_model_id": model_id
-                }
-            )
-        )
+    options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
 
     form = Form(
         Fieldset(
@@ -1519,7 +1491,12 @@ def training():
             Div(
                 Label(_("Existing Model:")),
                 Select(*options, id="existingModel", name="existing_model"),
-                Label(_("ControlNet Type:")), Input(id="controlnet_type_existing", name="controlnet_type"),
+                Label(_("ControlNet Type:")),
+                Select(
+                    Option("canny", value="canny", selected=True),
+                    Option("hed", value="hed"),
+                    id="controlnet_type", name="controlnet_type"
+                ),
                 Label(_("Reuse as ControlNet?")),
                 Select(Option(_("No"), value="no"), Option(_("Yes"), value="yes"),
                        name="reuse_as_controlnet", id="reuse_as_controlnet"),
@@ -1543,7 +1520,12 @@ def training():
             ),
             Div(
                 Label(_("New Model Name:")), Input(name="new_model_name"),
-                Label(_("ControlNet Type:")), Input(id="controlnet_type", name="controlnet_type"),
+                Label(_("ControlNet Type:")),
+                Select(
+                    Option("canny", value="canny", selected=True),
+                    Option("hed", value="hed"),
+                    id="controlnet_type_existing", name="controlnet_type"
+                ),
                 Div(
                     Label(_("ControlNet Source:")),
                     Select(
@@ -1687,13 +1669,7 @@ def training():
                       el.value = d;
                     }}
                   }}
-                  const textIds = ["controlnet_type"];
-                  textIds.forEach(id=>{{
-                    const el = document.getElementById(id);
-                    if (el) el.addEventListener("change", ()=>cleanText(el, el.defaultValue||"canny"));
-                  }});
-                
-              
+
                   const defaults = {{
                     canny: {{
                       controlnet_type: "canny",
@@ -1872,7 +1848,7 @@ def results():
     models = cached_models_list()
     selected_model = request.args.get("model", "all")
     page = int(request.args.get("page", 1))
-    per_page = int(request.args.get("per_page", 4))
+    per_page = int(request.args.get("per_page", 10))
 
     if "results_cursors" not in session:
         session["results_cursors"] = {}
