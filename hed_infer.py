@@ -174,5 +174,5 @@ def hed_from_path(input_path, output_path=None):
         # consistent PNG output
         output_path = f"{root}_hed.png"
 
-    PIL.Image.fromarray(out_img).save(output_path)
+    PIL.Image.fromarray(out_img).convert("RGB").save(output_path)
     return output_path
