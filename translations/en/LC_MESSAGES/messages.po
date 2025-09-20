@@ -1,0 +1,302 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: flux-designer\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: app.py
+msgid "Error"
+msgstr "Error"
+
+msgid "Flux Designer"
+msgstr "Flux Designer"
+
+msgid "Home"
+msgstr "Home"
+
+msgid "Inference"
+msgstr "Inference"
+
+msgid "Training"
+msgstr "Training"
+
+msgid "Results"
+msgstr "Results"
+
+msgid "Connect to Lambda"
+msgstr "Connect to Lambda"
+
+msgid "Inference Job Terminated"
+msgstr "Inference Job Terminated"
+
+msgid "Training Job Terminated"
+msgstr "Training Job Terminated"
+
+msgid "Open full resolution"
+msgstr "Open full resolution"
+
+msgid "Elapsed time: %(seconds)s seconds"
+msgstr "Elapsed time: %(seconds)s seconds"
+
+msgid "Connection lost, retrying..."
+msgstr "Connection lost, retrying..."
+
+msgid "SSH client not connected"
+msgstr "SSH client not connected"
+
+msgid "Progress: %(progress)d%%"
+msgstr "Progress: %(progress)d%%"
+
+msgid "Map: %(progress)d%%"
+msgstr "Map: %(progress)d%%"
+
+msgid "Fetching files: %(progress)d%%"
+msgstr "Fetching files: %(progress)d%%"
+
+msgid "Loading checkpoint: %(progress)d%%"
+msgstr "Loading checkpoint: %(progress)d%%"
+
+msgid "Processing Files: %(progress)d%%"
+msgstr "Processing Files: %(progress)d%%"
+
+msgid "Work started"
+msgstr "Work started"
+
+msgid "⚠ Connection lost, retrying..."
+msgstr "⚠ Connection lost, retrying..."
+
+msgid "Lambda API key is not configured!"
+msgstr "Lambda API key is not configured!"
+
+msgid "Lambda instance not found."
+msgstr "Lambda instance not found."
+
+msgid "Instance not active (status=%(status)s)"
+msgstr "Instance not active (status=%(status)s)"
+
+msgid "Configuring Docker daemon..."
+msgstr "Configuring Docker daemon..."
+
+msgid "Pulling Docker image %(image)s..."
+msgstr "Pulling Docker image %(image)s..."
+
+msgid "Removing any old container..."
+msgstr "Removing any old container..."
+
+msgid "Starting new container..."
+msgstr "Starting new container..."
+
+msgid "Installing extra Python packages"
+msgstr "Installing extra Python packages"
+
+msgid "Container was not created at all."
+msgstr "Container was not created at all."
+
+msgid "Container failed to start:"
+msgstr "Container failed to start:"
+
+msgid "Updating repo inside container..."
+msgstr "Updating repo inside container..."
+
+msgid "Lambda is ready."
+msgstr "Lambda is ready."
+
+msgid "Connect Lambda Failed"
+msgstr "Connect Lambda Failed"
+
+msgid "Connect Lambda Logs"
+msgstr "Connect Lambda Logs"
+
+msgid "Continue to Home"
+msgstr "Continue to Home"
+
+msgid "Before using this app, ensure the lambda remote machine is ready."
+msgstr "Before using this app, ensure the lambda remote machine is ready."
+
+msgid "Connect to Lambda & Pull Docker Image"
+msgstr "Connect to Lambda & Pull Docker Image"
+
+msgid "Connecting..."
+msgstr "Connecting..."
+
+msgid "Lambda instance is connected and Docker image is ready."
+msgstr "Lambda instance is connected and Docker image is ready."
+
+msgid "Go to Inference Page"
+msgstr "Go to Inference Page"
+
+msgid "Go to Training Page"
+msgstr "Go to Training Page"
+
+msgid "Go to Results Page"
+msgstr "Go to Results Page"
+
+msgid "Getting Started"
+msgstr "Getting Started"
+
+msgid "Create a Lambda Cloud account & API key."
+msgstr "Create a Lambda Cloud account & API key."
+
+msgid "Start the Lambda machine and wait until it's started"
+msgstr "Start the Lambda machine and wait until it's started"
+
+msgid "Make sure the Lambda machine IP, Lambda API key and region are set correctly (IP: %(ip)s, Region: %(region)s)."
+msgstr "Make sure the Lambda machine IP, Lambda API key and region are set correctly (IP: %(ip)s, Region: %(region)s)."
+
+msgid "Generate images and fine-tune models with ControlNet models running on Lambda Cloud."
+msgstr "Generate images and fine-tune models with ControlNet models running on Lambda Cloud."
+
+msgid "Inference Job Submitted"
+msgstr "Inference Job Submitted"
+
+msgid "Model: %(model)s"
+msgstr "Model: %(model)s"
+
+msgid "Prompt: %(prompt)s"
+msgstr "Prompt: %(prompt)s"
+
+msgid "Job ID: %(jobid)s"
+msgstr "Job ID: %(jobid)s"
+
+msgid "Elapsed time"
+msgstr "Elapsed time"
+
+msgid "Generate another image"
+msgstr "Generate another image"
+
+msgid "Waiting for your turn..."
+msgstr "Waiting for your turn..."
+
+msgid "Waiting for Inference"
+msgstr "Waiting for Inference"
+
+msgid "Model Selection"
+msgstr "Model Selection"
+
+msgid "Parameters"
+msgstr "Parameters"
+
+msgid "Scale:"
+msgstr "Scale:"
+
+msgid "Steps:"
+msgstr "Steps:"
+
+msgid "Guidance:"
+msgstr "Guidance:"
+
+msgid "Prompt & Control Image"
+msgstr "Prompt & Control Image"
+
+msgid "Prompt:"
+msgstr "Prompt:"
+
+msgid "Upload Image:"
+msgstr "Upload Image:"
+
+msgid "Pencil"
+msgstr "Pencil"
+
+msgid "Eraser"
+msgstr "Eraser"
+
+msgid "Undo"
+msgstr "Undo"
+
+msgid "Redo"
+msgstr "Redo"
+
+msgid "Clear"
+msgstr "Clear"
+
+msgid "Run Inference"
+msgstr "Run Inference"
+
+msgid "Training Job Submitted"
+msgstr "Training Job Submitted"
+
+msgid "Job ID: %(job_id)s"
+msgstr "Job ID: %(job_id)s"
+
+msgid "Waiting for Training"
+msgstr "Waiting for Training"
+
+msgid "Mode"
+msgstr "Mode"
+
+msgid "Fine-tune existing model"
+msgstr "Fine-tune existing model"
+
+msgid "Create new model"
+msgstr "Create new model"
+
+msgid "Existing Model:"
+msgstr "Existing Model:"
+
+msgid "ControlNet Type:"
+msgstr "ControlNet Type:"
+
+msgid "Reuse as ControlNet?"
+msgstr "Reuse as ControlNet?"
+
+msgid "ControlNet Source:"
+msgstr "ControlNet Source:"
+
+msgid "Choose Existing ControlNet:"
+msgstr "Choose Existing ControlNet:"
+
+msgid "New Model Name:"
+msgstr "New Model Name:"
+
+msgid "Quantization & Precision"
+msgstr "Quantization & Precision"
+
+msgid "Use N4 Quantization"
+msgstr "Use N4 Quantization"
+
+msgid "Mixed Precision"
+msgstr "Mixed Precision"
+
+msgid "Training Parameters"
+msgstr "Training Parameters"
+
+msgid "Learning Rate:"
+msgstr "Learning Rate:"
+
+msgid "Batch Size:"
+msgstr "Batch Size:"
+
+msgid "Gradient Accumulation:"
+msgstr "Gradient Accumulation:"
+
+msgid "Resolution:"
+msgstr "Resolution:"
+
+msgid "Checkpoint Steps:"
+msgstr "Checkpoint Steps:"
+
+msgid "Validation Steps:"
+msgstr "Validation Steps:"
+
+msgid "Validation"
+msgstr "Validation"
+
+msgid "Validation Image:"
+msgstr "Validation Image:"
+
+msgid "Prompt"
+msgstr "Prompt"
+
+msgid "Start Training"
+msgstr "Start Training"
+
+msgid "Invalid repo name: must use only alphanumeric, '-', '_' or '.' (no '--'/'..', cannot start/end with '-' or '.')"
+msgstr "Invalid repo name: must use only alphanumeric, '-', '_' or '.' (no '--'/'..', cannot start/end with '-' or '.')"
+
+msgid "Training Job Failed"
+msgstr "Training Job Failed"
+
+msgid "Go to training"
+msgstr "Go to training"

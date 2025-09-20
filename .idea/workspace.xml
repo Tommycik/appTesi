@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AnalysisUIOptions">
+    <option name="ANALYZE_INJECTED_CODE" value="false" />
+  </component>
   <component name="AutoImportSettings">
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="test">
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment=" correzione pagina risultati">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -36,7 +38,7 @@
   <component name="Git.Settings">
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
-        <entry key="$PROJECT_DIR$" value="189fc324e58fe7cc40d14f78dbc74838a966afa5" />
+        <entry key="$PROJECT_DIR$" value="polling" />
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -70,17 +72,19 @@
     &quot;Flask server.Flask (app.py).executor&quot;: &quot;Run&quot;,
     &quot;Flask server.Flask (app2.py).executor&quot;: &quot;Run&quot;,
     &quot;Flask server.appTesi.executor&quot;: &quot;Run&quot;,
+    &quot;Python.mathic.executor&quot;: &quot;Run&quot;,
     &quot;Python.testEnv.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;polling&quot;,
     &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/tommy/PycharmProjects/appTesi&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/tommy/PycharmProjects/appTesi/translations/it/LC_MESSAGES&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;run.code.analysis.last.selected.profile&quot;: &quot;aDefault&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;Errors&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
@@ -126,8 +130,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-1d06a55b98c1-74d2a5396914-JavaScript-PY-241.14494.241" />
-        <option value="bundled-python-sdk-0509580d9d50-28c9f5db9ffe-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.14494.241" />
+        <option value="bundled-js-predefined-1d06a55b98c1-0b3e54e931b4-JavaScript-PY-241.17890.14" />
+        <option value="bundled-python-sdk-5b207ade9991-7e9c3bbb6e34-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-241.17890.14" />
       </set>
     </attachedChunks>
   </component>
@@ -164,401 +168,423 @@
       <workItem from="1756664421414" duration="4623000" />
       <workItem from="1756671994399" duration="8861000" />
       <workItem from="1756725534538" duration="6034000" />
-      <workItem from="1756829045602" duration="14886000" />
+      <workItem from="1756829045602" duration="13608000" />
+      <workItem from="1756997885804" duration="3360000" />
+      <workItem from="1757001350509" duration="2917000" />
+      <workItem from="1757034239846" duration="6471000" />
+      <workItem from="1757113457412" duration="4618000" />
+      <workItem from="1757196141128" duration="1068000" />
+      <workItem from="1757201200934" duration="1189000" />
+      <workItem from="1757491572803" duration="1790000" />
+      <workItem from="1757538608718" duration="338000" />
+      <workItem from="1757605981899" duration="3752000" />
+      <workItem from="1757664464599" duration="14743000" />
+      <workItem from="1757694986262" duration="5000" />
+      <workItem from="1757695003469" duration="610000" />
+      <workItem from="1757793659156" duration="2547000" />
+      <workItem from="1757803297200" duration="9347000" />
+      <workItem from="1757965558594" duration="9540000" />
+      <workItem from="1758012966989" duration="13667000" />
+      <workItem from="1758097110544" duration="13933000" />
+      <workItem from="1758141756853" duration="7038000" />
+      <workItem from="1758185526085" duration="13621000" />
+      <workItem from="1758270011574" duration="13239000" />
+      <workItem from="1758360855141" duration="14745000" />
+      <workItem from="1758399609238" duration="10344000" />
     </task>
-    <task id="LOCAL-00005" summary="inference and serializing">
+    <task id="LOCAL-00056" summary="valori default">
       <option name="closed" value="true" />
-      <created>1753887361537</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
+      <created>1756999838431</created>
+      <option name="number" value="00056" />
+      <option name="presentableId" value="LOCAL-00056" />
       <option name="project" value="LOCAL" />
-      <updated>1753887361537</updated>
+      <updated>1756999838431</updated>
     </task>
-    <task id="LOCAL-00006" summary="inference and serializing">
+    <task id="LOCAL-00057" summary="valori default">
       <option name="closed" value="true" />
-      <created>1753986251608</created>
-      <option name="number" value="00006" />
-      <option name="presentableId" value="LOCAL-00006" />
+      <created>1757000848044</created>
+      <option name="number" value="00057" />
+      <option name="presentableId" value="LOCAL-00057" />
       <option name="project" value="LOCAL" />
-      <updated>1753986251608</updated>
+      <updated>1757000848044</updated>
     </task>
-    <task id="LOCAL-00007" summary="inference and serializing">
+    <task id="LOCAL-00058" summary="valori default">
       <option name="closed" value="true" />
-      <created>1753987339470</created>
-      <option name="number" value="00007" />
-      <option name="presentableId" value="LOCAL-00007" />
+      <created>1757001050566</created>
+      <option name="number" value="00058" />
+      <option name="presentableId" value="LOCAL-00058" />
       <option name="project" value="LOCAL" />
-      <updated>1753987339470</updated>
+      <updated>1757001050566</updated>
     </task>
-    <task id="LOCAL-00008" summary="conversione immagine caricata e modifica o creazione immagine di controllo">
+    <task id="LOCAL-00059" summary="valori default">
       <option name="closed" value="true" />
-      <created>1754215593441</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
+      <created>1757001175243</created>
+      <option name="number" value="00059" />
+      <option name="presentableId" value="LOCAL-00059" />
       <option name="project" value="LOCAL" />
-      <updated>1754215593441</updated>
+      <updated>1757001175243</updated>
     </task>
-    <task id="LOCAL-00009" summary="conversione immagine caricata e modifica o creazione immagine di controllo">
+    <task id="LOCAL-00060" summary="risoluzione immagini e uso di screen per riconnessione">
       <option name="closed" value="true" />
-      <created>1754220009520</created>
-      <option name="number" value="00009" />
-      <option name="presentableId" value="LOCAL-00009" />
+      <created>1757029071727</created>
+      <option name="number" value="00060" />
+      <option name="presentableId" value="LOCAL-00060" />
       <option name="project" value="LOCAL" />
-      <updated>1754220009520</updated>
+      <updated>1757029071727</updated>
     </task>
-    <task id="LOCAL-00010" summary="training">
+    <task id="LOCAL-00061" summary="risoluzione immagini e uso di screen per riconnessione">
       <option name="closed" value="true" />
-      <created>1755170151717</created>
-      <option name="number" value="00010" />
-      <option name="presentableId" value="LOCAL-00010" />
+      <created>1757110453914</created>
+      <option name="number" value="00061" />
+      <option name="presentableId" value="LOCAL-00061" />
       <option name="project" value="LOCAL" />
-      <updated>1755170151717</updated>
+      <updated>1757110453914</updated>
     </task>
-    <task id="LOCAL-00011" summary="training">
+    <task id="LOCAL-00062" summary="risolto bug screen">
       <option name="closed" value="true" />
-      <created>1755382871036</created>
-      <option name="number" value="00011" />
-      <option name="presentableId" value="LOCAL-00011" />
+      <created>1757111995781</created>
+      <option name="number" value="00062" />
+      <option name="presentableId" value="LOCAL-00062" />
       <option name="project" value="LOCAL" />
-      <updated>1755382871036</updated>
+      <updated>1757111995782</updated>
     </task>
-    <task id="LOCAL-00012" summary="training">
+    <task id="LOCAL-00063" summary="risolto bug screen">
       <option name="closed" value="true" />
-      <created>1755383005979</created>
-      <option name="number" value="00012" />
-      <option name="presentableId" value="LOCAL-00012" />
+      <created>1757112438569</created>
+      <option name="number" value="00063" />
+      <option name="presentableId" value="LOCAL-00063" />
       <option name="project" value="LOCAL" />
-      <updated>1755383005979</updated>
+      <updated>1757112438569</updated>
     </task>
-    <task id="LOCAL-00013" summary="training">
+    <task id="LOCAL-00064" summary="risolto bug screen">
       <option name="closed" value="true" />
-      <created>1755428370158</created>
-      <option name="number" value="00013" />
-      <option name="presentableId" value="LOCAL-00013" />
+      <created>1757112599264</created>
+      <option name="number" value="00064" />
+      <option name="presentableId" value="LOCAL-00064" />
       <option name="project" value="LOCAL" />
-      <updated>1755428370158</updated>
+      <updated>1757112599264</updated>
     </task>
-    <task id="LOCAL-00014" summary="training">
+    <task id="LOCAL-00065" summary="risolto bug screen">
       <option name="closed" value="true" />
-      <created>1755434313793</created>
-      <option name="number" value="00014" />
-      <option name="presentableId" value="LOCAL-00014" />
+      <created>1757112987977</created>
+      <option name="number" value="00065" />
+      <option name="presentableId" value="LOCAL-00065" />
       <option name="project" value="LOCAL" />
-      <updated>1755434313793</updated>
+      <updated>1757112987977</updated>
     </task>
-    <task id="LOCAL-00015" summary="training">
+    <task id="LOCAL-00066" summary="risolto bug screen">
       <option name="closed" value="true" />
-      <created>1755463119721</created>
-      <option name="number" value="00015" />
-      <option name="presentableId" value="LOCAL-00015" />
+      <created>1757191386172</created>
+      <option name="number" value="00066" />
+      <option name="presentableId" value="LOCAL-00066" />
       <option name="project" value="LOCAL" />
-      <updated>1755463119721</updated>
+      <updated>1757191386172</updated>
     </task>
-    <task id="LOCAL-00016" summary="training">
+    <task id="LOCAL-00067" summary="risolto bug screen">
       <option name="closed" value="true" />
-      <created>1755464029207</created>
-      <option name="number" value="00016" />
-      <option name="presentableId" value="LOCAL-00016" />
+      <created>1757193859810</created>
+      <option name="number" value="00067" />
+      <option name="presentableId" value="LOCAL-00067" />
       <option name="project" value="LOCAL" />
-      <updated>1755464029207</updated>
+      <updated>1757193859810</updated>
     </task>
-    <task id="LOCAL-00017" summary="training">
+    <task id="LOCAL-00068" summary="pulizia codice, mancano tre pagine principali">
       <option name="closed" value="true" />
-      <created>1755464757887</created>
-      <option name="number" value="00017" />
-      <option name="presentableId" value="LOCAL-00017" />
+      <created>1757194163838</created>
+      <option name="number" value="00068" />
+      <option name="presentableId" value="LOCAL-00068" />
       <option name="project" value="LOCAL" />
-      <updated>1755464757887</updated>
+      <updated>1757194163839</updated>
     </task>
-    <task id="LOCAL-00018" summary="training">
+    <task id="LOCAL-00069" summary="Log rossis e fallimento, link alla home aggiunto, stile canvas migliorato">
       <option name="closed" value="true" />
-      <created>1755466108150</created>
-      <option name="number" value="00018" />
-      <option name="presentableId" value="LOCAL-00018" />
+      <created>1757626034523</created>
+      <option name="number" value="00069" />
+      <option name="presentableId" value="LOCAL-00069" />
       <option name="project" value="LOCAL" />
-      <updated>1755466108150</updated>
+      <updated>1757626034523</updated>
     </task>
-    <task id="LOCAL-00019" summary="training permette creazione nuovi modelli e parametri passati con yaml">
+    <task id="LOCAL-00070" summary="Aggiunta traduzione automatica">
       <option name="closed" value="true" />
-      <created>1755466131897</created>
-      <option name="number" value="00019" />
-      <option name="presentableId" value="LOCAL-00019" />
+      <created>1757627380460</created>
+      <option name="number" value="00070" />
+      <option name="presentableId" value="LOCAL-00070" />
       <option name="project" value="LOCAL" />
-      <updated>1755466131897</updated>
+      <updated>1757627380460</updated>
     </task>
-    <task id="LOCAL-00020" summary="training permette creazione nuovi modelli e parametri passati con yaml">
+    <task id="LOCAL-00071" summary="Aggiunta traduzione automatica e sistemate pagine">
       <option name="closed" value="true" />
-      <created>1755466622964</created>
-      <option name="number" value="00020" />
-      <option name="presentableId" value="LOCAL-00020" />
+      <created>1757668755771</created>
+      <option name="number" value="00071" />
+      <option name="presentableId" value="LOCAL-00071" />
       <option name="project" value="LOCAL" />
-      <updated>1755466622964</updated>
+      <updated>1757668755772</updated>
     </task>
-    <task id="LOCAL-00021" summary="training permette creazione nuovi modelli e parametri passati con yaml">
+    <task id="LOCAL-00072" summary="Aggiunta traduzione automatica e sistemate pagine">
       <option name="closed" value="true" />
-      <created>1755467285829</created>
-      <option name="number" value="00021" />
-      <option name="presentableId" value="LOCAL-00021" />
+      <created>1757669011951</created>
+      <option name="number" value="00072" />
+      <option name="presentableId" value="LOCAL-00072" />
       <option name="project" value="LOCAL" />
-      <updated>1755467285829</updated>
+      <updated>1757669011951</updated>
     </task>
-    <task id="LOCAL-00022" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+    <task id="LOCAL-00073" summary="Aggiunta traduzione automatica e sistemate pagine">
       <option name="closed" value="true" />
-      <created>1755510796537</created>
-      <option name="number" value="00022" />
-      <option name="presentableId" value="LOCAL-00022" />
+      <created>1757683839855</created>
+      <option name="number" value="00073" />
+      <option name="presentableId" value="LOCAL-00073" />
       <option name="project" value="LOCAL" />
-      <updated>1755510796537</updated>
+      <updated>1757683839855</updated>
     </task>
-    <task id="LOCAL-00023" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+    <task id="LOCAL-00074" summary="Aggiunta traduzione automatica e sistemate pagine">
       <option name="closed" value="true" />
-      <created>1755511400392</created>
-      <option name="number" value="00023" />
-      <option name="presentableId" value="LOCAL-00023" />
+      <created>1757692187963</created>
+      <option name="number" value="00074" />
+      <option name="presentableId" value="LOCAL-00074" />
       <option name="project" value="LOCAL" />
-      <updated>1755511400392</updated>
+      <updated>1757692187963</updated>
     </task>
-    <task id="LOCAL-00024" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+    <task id="LOCAL-00075" summary="Aggiunta traduzione automatica e sistemate pagine">
       <option name="closed" value="true" />
-      <created>1755519784011</created>
-      <option name="number" value="00024" />
-      <option name="presentableId" value="LOCAL-00024" />
+      <created>1757800907042</created>
+      <option name="number" value="00075" />
+      <option name="presentableId" value="LOCAL-00075" />
       <option name="project" value="LOCAL" />
-      <updated>1755519784011</updated>
+      <updated>1757800907042</updated>
     </task>
-    <task id="LOCAL-00025" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+    <task id="LOCAL-00076" summary="Aggiunta traduzione automatica e sistemate pagine">
       <option name="closed" value="true" />
-      <created>1755618710954</created>
-      <option name="number" value="00025" />
-      <option name="presentableId" value="LOCAL-00025" />
+      <created>1757802383857</created>
+      <option name="number" value="00076" />
+      <option name="presentableId" value="LOCAL-00076" />
       <option name="project" value="LOCAL" />
-      <updated>1755618710954</updated>
+      <updated>1757802383857</updated>
     </task>
-    <task id="LOCAL-00026" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+    <task id="LOCAL-00077" summary="Aggiunta traduzione automatica e sistemate pagine">
       <option name="closed" value="true" />
-      <created>1755619262768</created>
-      <option name="number" value="00026" />
-      <option name="presentableId" value="LOCAL-00026" />
+      <created>1757802626849</created>
+      <option name="number" value="00077" />
+      <option name="presentableId" value="LOCAL-00077" />
       <option name="project" value="LOCAL" />
-      <updated>1755619262768</updated>
+      <updated>1757802626849</updated>
     </task>
-    <task id="LOCAL-00027" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+    <task id="LOCAL-00078" summary="Aggiunta traduzione automatica e sistemate pagine">
       <option name="closed" value="true" />
-      <created>1755619963038</created>
-      <option name="number" value="00027" />
-      <option name="presentableId" value="LOCAL-00027" />
+      <created>1757802942311</created>
+      <option name="number" value="00078" />
+      <option name="presentableId" value="LOCAL-00078" />
       <option name="project" value="LOCAL" />
-      <updated>1755619963038</updated>
+      <updated>1757802942311</updated>
     </task>
-    <task id="LOCAL-00028" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+    <task id="LOCAL-00079" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1755620504152</created>
-      <option name="number" value="00028" />
-      <option name="presentableId" value="LOCAL-00028" />
+      <created>1757951396257</created>
+      <option name="number" value="00079" />
+      <option name="presentableId" value="LOCAL-00079" />
       <option name="project" value="LOCAL" />
-      <updated>1755620504152</updated>
+      <updated>1757951396257</updated>
     </task>
-    <task id="LOCAL-00029" summary="training permette creazione nuovi modelli e parametri passati con yaml, pagina risultati e separazione js">
+    <task id="LOCAL-00080" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1755793510294</created>
-      <option name="number" value="00029" />
-      <option name="presentableId" value="LOCAL-00029" />
+      <created>1757952420069</created>
+      <option name="number" value="00080" />
+      <option name="presentableId" value="LOCAL-00080" />
       <option name="project" value="LOCAL" />
-      <updated>1755793510294</updated>
+      <updated>1757952420069</updated>
     </task>
-    <task id="LOCAL-00030" summary="training.js perfezionato">
+    <task id="LOCAL-00081" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1755794678174</created>
-      <option name="number" value="00030" />
-      <option name="presentableId" value="LOCAL-00030" />
+      <created>1757952644682</created>
+      <option name="number" value="00081" />
+      <option name="presentableId" value="LOCAL-00081" />
       <option name="project" value="LOCAL" />
-      <updated>1755794678174</updated>
+      <updated>1757952644682</updated>
     </task>
-    <task id="LOCAL-00031" summary="risolto bug inferenza">
+    <task id="LOCAL-00082" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1755898329740</created>
-      <option name="number" value="00031" />
-      <option name="presentableId" value="LOCAL-00031" />
+      <created>1757955758512</created>
+      <option name="number" value="00082" />
+      <option name="presentableId" value="LOCAL-00082" />
       <option name="project" value="LOCAL" />
-      <updated>1755898329740</updated>
+      <updated>1757955758512</updated>
     </task>
-    <task id="LOCAL-00032" summary="risolto bug inferenza">
+    <task id="LOCAL-00083" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1755900137328</created>
-      <option name="number" value="00032" />
-      <option name="presentableId" value="LOCAL-00032" />
+      <created>1757956303784</created>
+      <option name="number" value="00083" />
+      <option name="presentableId" value="LOCAL-00083" />
       <option name="project" value="LOCAL" />
-      <updated>1755900137328</updated>
+      <updated>1757956303784</updated>
     </task>
-    <task id="LOCAL-00033" summary="risolto bug inferenza">
+    <task id="LOCAL-00084" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1755902214280</created>
-      <option name="number" value="00033" />
-      <option name="presentableId" value="LOCAL-00033" />
+      <created>1757958490596</created>
+      <option name="number" value="00084" />
+      <option name="presentableId" value="LOCAL-00084" />
       <option name="project" value="LOCAL" />
-      <updated>1755902214280</updated>
+      <updated>1757958490596</updated>
     </task>
-    <task id="LOCAL-00034" summary="risolvere problema caricamento multiplo">
+    <task id="LOCAL-00085" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1755902340426</created>
-      <option name="number" value="00034" />
-      <option name="presentableId" value="LOCAL-00034" />
+      <created>1757958934603</created>
+      <option name="number" value="00085" />
+      <option name="presentableId" value="LOCAL-00085" />
       <option name="project" value="LOCAL" />
-      <updated>1755902340426</updated>
+      <updated>1757958934603</updated>
     </task>
-    <task id="LOCAL-00035" summary="risolvere problema caricamento multiplo e training">
+    <task id="LOCAL-00086" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1756049342716</created>
-      <option name="number" value="00035" />
-      <option name="presentableId" value="LOCAL-00035" />
+      <created>1757974400984</created>
+      <option name="number" value="00086" />
+      <option name="presentableId" value="LOCAL-00086" />
       <option name="project" value="LOCAL" />
-      <updated>1756049342716</updated>
+      <updated>1757974400984</updated>
     </task>
-    <task id="LOCAL-00036" summary="risolvere problema caricamento multiplo e training">
+    <task id="LOCAL-00087" summary="Aggiunta compatibilità png">
       <option name="closed" value="true" />
-      <created>1756052224296</created>
-      <option name="number" value="00036" />
-      <option name="presentableId" value="LOCAL-00036" />
+      <created>1757974459149</created>
+      <option name="number" value="00087" />
+      <option name="presentableId" value="LOCAL-00087" />
       <option name="project" value="LOCAL" />
-      <updated>1756052224296</updated>
+      <updated>1757974459149</updated>
     </task>
-    <task id="LOCAL-00037" summary="risolvere problema caricamento multiplo e training">
+    <task id="LOCAL-00088" summary="Pulizia codice">
       <option name="closed" value="true" />
-      <created>1756218935084</created>
-      <option name="number" value="00037" />
-      <option name="presentableId" value="LOCAL-00037" />
+      <created>1758100820183</created>
+      <option name="number" value="00088" />
+      <option name="presentableId" value="LOCAL-00088" />
       <option name="project" value="LOCAL" />
-      <updated>1756218935084</updated>
+      <updated>1758100820183</updated>
     </task>
-    <task id="LOCAL-00038" summary="risolvere problema caricamento multiplo e training">
+    <task id="LOCAL-00089" summary="Pulizia codice">
       <option name="closed" value="true" />
-      <created>1756221143082</created>
-      <option name="number" value="00038" />
-      <option name="presentableId" value="LOCAL-00038" />
+      <created>1758105104033</created>
+      <option name="number" value="00089" />
+      <option name="presentableId" value="LOCAL-00089" />
       <option name="project" value="LOCAL" />
-      <updated>1756221143082</updated>
+      <updated>1758105104033</updated>
     </task>
-    <task id="LOCAL-00039" summary="risolvere problema caricamento multiplo e training">
+    <task id="LOCAL-00090" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756221640042</created>
-      <option name="number" value="00039" />
-      <option name="presentableId" value="LOCAL-00039" />
+      <created>1758109210608</created>
+      <option name="number" value="00090" />
+      <option name="presentableId" value="LOCAL-00090" />
       <option name="project" value="LOCAL" />
-      <updated>1756221640042</updated>
+      <updated>1758109210608</updated>
     </task>
-    <task id="LOCAL-00040" summary="risolto bug fine training e ixed precision">
+    <task id="LOCAL-00091" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756223572443</created>
-      <option name="number" value="00040" />
-      <option name="presentableId" value="LOCAL-00040" />
+      <created>1758142583677</created>
+      <option name="number" value="00091" />
+      <option name="presentableId" value="LOCAL-00091" />
       <option name="project" value="LOCAL" />
-      <updated>1756223572443</updated>
+      <updated>1758142583677</updated>
     </task>
-    <task id="LOCAL-00041" summary="risolvere problema caricamento multiplo e training">
+    <task id="LOCAL-00092" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756406342997</created>
-      <option name="number" value="00041" />
-      <option name="presentableId" value="LOCAL-00041" />
+      <created>1758143291777</created>
+      <option name="number" value="00092" />
+      <option name="presentableId" value="LOCAL-00092" />
       <option name="project" value="LOCAL" />
-      <updated>1756406342997</updated>
+      <updated>1758143291777</updated>
     </task>
-    <task id="LOCAL-00042" summary="risolvere problema caricamento multiplo e training">
+    <task id="LOCAL-00093" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756571796219</created>
-      <option name="number" value="00042" />
-      <option name="presentableId" value="LOCAL-00042" />
+      <created>1758211217459</created>
+      <option name="number" value="00093" />
+      <option name="presentableId" value="LOCAL-00093" />
       <option name="project" value="LOCAL" />
-      <updated>1756571796219</updated>
+      <updated>1758211217459</updated>
     </task>
-    <task id="LOCAL-00043" summary="miglioramento css e results">
+    <task id="LOCAL-00094" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756650765193</created>
-      <option name="number" value="00043" />
-      <option name="presentableId" value="LOCAL-00043" />
+      <created>1758273648028</created>
+      <option name="number" value="00094" />
+      <option name="presentableId" value="LOCAL-00094" />
       <option name="project" value="LOCAL" />
-      <updated>1756650765193</updated>
+      <updated>1758273648029</updated>
     </task>
-    <task id="LOCAL-00044" summary="miglioramento css e results">
+    <task id="LOCAL-00095" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756664397275</created>
-      <option name="number" value="00044" />
-      <option name="presentableId" value="LOCAL-00044" />
+      <created>1758276082669</created>
+      <option name="number" value="00095" />
+      <option name="presentableId" value="LOCAL-00095" />
       <option name="project" value="LOCAL" />
-      <updated>1756664397275</updated>
+      <updated>1758276082669</updated>
     </task>
-    <task id="LOCAL-00045" summary="miglioramento css e results">
+    <task id="LOCAL-00096" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756665810761</created>
-      <option name="number" value="00045" />
-      <option name="presentableId" value="LOCAL-00045" />
+      <created>1758283248792</created>
+      <option name="number" value="00096" />
+      <option name="presentableId" value="LOCAL-00096" />
       <option name="project" value="LOCAL" />
-      <updated>1756665810761</updated>
+      <updated>1758283248792</updated>
     </task>
-    <task id="LOCAL-00046" summary="miglioramento css e results">
+    <task id="LOCAL-00097" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756667017356</created>
-      <option name="number" value="00046" />
-      <option name="presentableId" value="LOCAL-00046" />
+      <created>1758405728707</created>
+      <option name="number" value="00097" />
+      <option name="presentableId" value="LOCAL-00097" />
       <option name="project" value="LOCAL" />
-      <updated>1756667017356</updated>
+      <updated>1758405728707</updated>
     </task>
-    <task id="LOCAL-00047" summary="miglioramento css e results">
+    <task id="LOCAL-00098" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756671648737</created>
-      <option name="number" value="00047" />
-      <option name="presentableId" value="LOCAL-00047" />
+      <created>1758405899200</created>
+      <option name="number" value="00098" />
+      <option name="presentableId" value="LOCAL-00098" />
       <option name="project" value="LOCAL" />
-      <updated>1756671648737</updated>
+      <updated>1758405899200</updated>
     </task>
-    <task id="LOCAL-00048" summary="miglioramento css e results">
+    <task id="LOCAL-00099" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756681106734</created>
-      <option name="number" value="00048" />
-      <option name="presentableId" value="LOCAL-00048" />
+      <created>1758408815062</created>
+      <option name="number" value="00099" />
+      <option name="presentableId" value="LOCAL-00099" />
       <option name="project" value="LOCAL" />
-      <updated>1756681106734</updated>
+      <updated>1758408815063</updated>
     </task>
-    <task id="LOCAL-00049" summary="risolto bug immagini caricate da utente">
+    <task id="LOCAL-00100" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756732121103</created>
-      <option name="number" value="00049" />
-      <option name="presentableId" value="LOCAL-00049" />
+      <created>1758410378018</created>
+      <option name="number" value="00100" />
+      <option name="presentableId" value="LOCAL-00100" />
       <option name="project" value="LOCAL" />
-      <updated>1756732121103</updated>
+      <updated>1758410378018</updated>
     </task>
-    <task id="LOCAL-00050" summary="risolto bug immagini caricate da utente">
+    <task id="LOCAL-00101" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756847930556</created>
-      <option name="number" value="00050" />
-      <option name="presentableId" value="LOCAL-00050" />
+      <created>1758410428205</created>
+      <option name="number" value="00101" />
+      <option name="presentableId" value="LOCAL-00101" />
       <option name="project" value="LOCAL" />
-      <updated>1756847930556</updated>
+      <updated>1758410428205</updated>
     </task>
-    <task id="LOCAL-00051" summary="attesa attiva e aggionramento in tempo reale">
+    <task id="LOCAL-00102" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756849095890</created>
-      <option name="number" value="00051" />
-      <option name="presentableId" value="LOCAL-00051" />
+      <created>1758410873422</created>
+      <option name="number" value="00102" />
+      <option name="presentableId" value="LOCAL-00102" />
       <option name="project" value="LOCAL" />
-      <updated>1756849095890</updated>
+      <updated>1758410873422</updated>
     </task>
-    <task id="LOCAL-00052" summary="miglioramento css e results">
+    <task id="LOCAL-00103" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756921994758</created>
-      <option name="number" value="00052" />
-      <option name="presentableId" value="LOCAL-00052" />
+      <created>1758411538768</created>
+      <option name="number" value="00103" />
+      <option name="presentableId" value="LOCAL-00103" />
       <option name="project" value="LOCAL" />
-      <updated>1756921994758</updated>
+      <updated>1758411538768</updated>
     </task>
-    <task id="LOCAL-00053" summary="test">
+    <task id="LOCAL-00104" summary=" correzione pagina risultati">
       <option name="closed" value="true" />
-      <created>1756930406982</created>
-      <option name="number" value="00053" />
-      <option name="presentableId" value="LOCAL-00053" />
+      <created>1758411683798</created>
+      <option name="number" value="00104" />
+      <option name="presentableId" value="LOCAL-00104" />
       <option name="project" value="LOCAL" />
-      <updated>1756930406982</updated>
+      <updated>1758411683798</updated>
     </task>
-    <option name="localTasksCounter" value="54" />
+    <option name="localTasksCounter" value="105" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -599,16 +625,25 @@
     <MESSAGE value="risolvere problema caricamento multiplo" />
     <MESSAGE value="risolto bug fine training e ixed precision" />
     <MESSAGE value="risolvere problema caricamento multiplo e training" />
-    <MESSAGE value="risolto bug immagini caricate da utente" />
-    <MESSAGE value="attesa attiva e aggionramento in tempo reale" />
     <MESSAGE value="miglioramento css e results" />
-    <MESSAGE value="test" />
-    <option name="LAST_COMMIT_MESSAGE" value="test" />
+    <MESSAGE value="risolto bug immagini caricate da utente" />
+    <MESSAGE value="Progresso funzionante" />
+    <MESSAGE value="valori default" />
+    <MESSAGE value="risoluzione immagini e uso di screen per riconnessione" />
+    <MESSAGE value="risolto bug screen" />
+    <MESSAGE value="pulizia codice, mancano tre pagine principali" />
+    <MESSAGE value="Log rossis e fallimento, link alla home aggiunto, stile canvas migliorato" />
+    <MESSAGE value="Aggiunta traduzione automatica" />
+    <MESSAGE value="Aggiunta traduzione automatica e sistemate pagine" />
+    <MESSAGE value="Aggiunta compatibilità png" />
+    <MESSAGE value="Pulizia codice" />
+    <MESSAGE value=" correzione pagina risultati" />
+    <option name="LAST_COMMIT_MESSAGE" value=" correzione pagina risultati" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1756930710554" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
+    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1758405457625" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$testEnv.coverage" NAME="testEnv Coverage Results" MODIFIED="1754212302482" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$Flask__app_py_.coverage" NAME="Flask (app.py) Coverage Results" MODIFIED="1754219779563" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
-    <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
 </project>
