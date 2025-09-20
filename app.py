@@ -1,7 +1,6 @@
 import queue
 import shlex
 import tempfile
-import threading
 import time
 import uuid
 from functools import wraps
@@ -16,7 +15,6 @@ import paramiko
 import requests
 import yaml
 import threading
-import concurrent.futures
 import re
 from flask import jsonify
 
