@@ -2028,4 +2028,4 @@ if __name__ == '__main__':
         print("WARNING: LAMBDA_CLOUD_API_KEY is not set in .env.")
     if not SSH_PRIVATE_KEY_PATH:
         print("WARNING: SSH_PRIVATE_KEY_PATH is not set in .env.")
-    app.run(debug=False, threaded=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, threaded=True, host='0.0.0.0', port=5000)
