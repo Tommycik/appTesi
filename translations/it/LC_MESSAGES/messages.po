@@ -291,3 +291,12 @@ msgstr "Prompt"
 
 msgid "Start Training"
 msgstr "Avvia addestramento"
+
+msgid "Invalid repo name: must use only alphanumeric, '-', '_' or '.' (no '--'/'..', cannot start/end with '-' or '.')"
+msgstr "Nome repository non valido: può contenere solo alfanumerici, '-', '_' o '.' (no '--'/'..', non può iniziare o finire con '-' o '.')"
+
+msgid "Training Job Failed"
+msgstr "Addestramento fallito"
+
+msgid "Go to training"
+msgstr "Vai all'addestramento"

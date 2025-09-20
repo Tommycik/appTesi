@@ -1282,7 +1282,6 @@ def training():
         else:  # new
             new_name = sanitize_text(request.form.get("new_model_name"), "my-default-model")
             if not validate_repo_name(new_name):
-                #todo aggiungere a file traduzione
                 flash(
                     _("Invalid repo name: must use only alphanumeric, '-', '_' or '.' (no '--'/'..', cannot start/end with '-' or '.')"),
                     "error")
@@ -1421,7 +1420,7 @@ def training():
                 style="background=none;border:none;box-shadow:none;",
                 cls="center-box", id="end-training"
             ),
-            #todo aggiungere a traduzione failed e go to training
+
             Script(f"""
             const status = document.getElementById("job-status");
             const result_div = document.getElementById("result-section");
@@ -2031,4 +2030,4 @@ if __name__ == '__main__':
         print("WARNING: LAMBDA_CLOUD_API_KEY is not set in .env.")
     if not SSH_PRIVATE_KEY_PATH:
         print("WARNING: SSH_PRIVATE_KEY_PATH is not set in .env.")
-    app.run(debug=True, threaded=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, threaded=True, host='0.0.0.0', port=5000)
