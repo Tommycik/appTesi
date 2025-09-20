@@ -7,7 +7,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment=" correzione pagina risultati" />
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment=" correzione pagina risultati">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -188,23 +190,7 @@
       <workItem from="1758185526085" duration="13621000" />
       <workItem from="1758270011574" duration="13239000" />
       <workItem from="1758360855141" duration="14745000" />
-      <workItem from="1758399609238" duration="9708000" />
-    </task>
-    <task id="LOCAL-00054" summary="Progresso funzionante">
-      <option name="closed" value="true" />
-      <created>1756943346088</created>
-      <option name="number" value="00054" />
-      <option name="presentableId" value="LOCAL-00054" />
-      <option name="project" value="LOCAL" />
-      <updated>1756943346088</updated>
-    </task>
-    <task id="LOCAL-00055" summary="Progresso funzionante">
-      <option name="closed" value="true" />
-      <created>1756944649460</created>
-      <option name="number" value="00055" />
-      <option name="presentableId" value="LOCAL-00055" />
-      <option name="project" value="LOCAL" />
-      <updated>1756944649460</updated>
+      <workItem from="1758399609238" duration="10344000" />
     </task>
     <task id="LOCAL-00056" summary="valori default">
       <option name="closed" value="true" />
@@ -582,7 +568,23 @@
       <option name="project" value="LOCAL" />
       <updated>1758410873422</updated>
     </task>
-    <option name="localTasksCounter" value="103" />
+    <task id="LOCAL-00103" summary=" correzione pagina risultati">
+      <option name="closed" value="true" />
+      <created>1758411538768</created>
+      <option name="number" value="00103" />
+      <option name="presentableId" value="LOCAL-00103" />
+      <option name="project" value="LOCAL" />
+      <updated>1758411538768</updated>
+    </task>
+    <task id="LOCAL-00104" summary=" correzione pagina risultati">
+      <option name="closed" value="true" />
+      <created>1758411683798</created>
+      <option name="number" value="00104" />
+      <option name="presentableId" value="LOCAL-00104" />
+      <option name="project" value="LOCAL" />
+      <updated>1758411683798</updated>
+    </task>
+    <option name="localTasksCounter" value="105" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
