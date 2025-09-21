@@ -1197,6 +1197,20 @@ def inference():
                                 restoreState(redoStack.pop());
                             }}
                         }});
+                        async function preprocessWithRetry(formData, retries=3) {{
+                            for (let i = 0; i < retries; i++) {{
+                                try {{
+                                    const response = await fetch("/preprocess_image", {{ method: "POST", body: formData }});
+                                    const data = await response.json();
+                                    if (data.status === "ok") return data;
+                                }} catch (e) {{
+                                    console.warn("Preprocess attempt failed", e);
+                                }}
+                                // Wait longer each retry
+                                await new Promise(r => setTimeout(r, 1000 * (i+1)));
+                            }}
+                            return {{status: "error", error: "Failed to preprocess after retries"}};
+                        }}
                         document.getElementById("uploadInput").addEventListener("change", async function (e) {{
                             const files = e.target.files;
                             if (!files.length) return;
@@ -1209,8 +1223,7 @@ def inference():
                             }}
                             formData.append("model", model);
                     
-                            const response = await fetch("/preprocess_image", {{ method: "POST", body: formData }});
-                            const data = await response.json();
+                             const data = await preprocessWithRetry(formData);
                     
                             if (data.status === "ok") {{
                                 const img = new Image();
@@ -1646,10 +1659,10 @@ def training():
                     el.value = asInt ? Math.round(n) : n;
                   }}
                   const ids = [
-                    ["learning_rate", 2e-6, false],
+                    ["learning_rate", 5e-6, false],
                     ["steps", 500, true],
                     ["train_batch_size", 2, true],
-                    ["gradient_accumulation_steps", 1, true],
+                    ["gradient_accumulation_steps", 2, true],
                     ["resolution", 512, true],
                     ["checkpointing_steps", 250, true],
                     ["validation_steps", 125, true],
