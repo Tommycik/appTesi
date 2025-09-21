@@ -157,8 +157,9 @@ def load_image_safe(path):
 def hed_from_path(input_path, output_path=None):
     pil_img = load_image_safe(input_path)
 
+    # Convert PIL → numpy → tensor
     np_img = np.array(pil_img).astype(np.float32) / 255.0
-    np_img = np_img[:, :, ::-1].transpose(2, 0, 1)  # RGB→BGR, HWC→CHW
+    np_img = np_img[:, :, ::-1].transpose(2, 0, 1)  # RGB→BGR, CHW
     ten_input = torch.FloatTensor(np.ascontiguousarray(np_img))
 
     ten_output = estimate(ten_input)
@@ -166,14 +167,25 @@ def hed_from_path(input_path, output_path=None):
     ten_output = ten_output.squeeze().cpu().detach().numpy()  # (H, W)
     out_img = (np.clip(ten_output, 0.0, 1.0) * 255.0).astype(np.uint8)
 
+    import cv2
+
+    # 1. Quantize to discrete grayscale levels (instead of hard binary)
+    levels = 32  # 4, 8, 16 or 32 depending on detail vs. stability
+    step = 255 // levels
+    out_img = (out_img // step) * step
+
+    # 2. Optional: Dilate slightly to emphasize lines
+    kernel = np.ones((1, 1), np.uint8)
+    out_img = cv2.dilate(out_img, kernel, iterations=1)
+
     # Ensure 3 channels (RGB)
-    if out_img.ndim == 2:  # grayscale
+    if out_img.ndim == 2:
         out_img = np.stack([out_img] * 3, axis=-1)
 
     if not output_path:
         root, _ = os.path.splitext(input_path)
         # consistent PNG output
-        output_path = f"{root}_hed.png"
+        output_path = f"{root}_hed.jpg"
 
-    PIL.Image.fromarray(out_img).convert("RGB").save(output_path)
+    PIL.Image.fromarray(out_img, mode="RGB").save(output_path, format="JPEG")
     return output_path

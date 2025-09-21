@@ -74,7 +74,7 @@ cache_store = {
     "models": {"data": None, "timestamp": 0},
     "model_info": {}
 }
-CACHE_TTL = 300  # seconds = 5 minutes
+CACHE_TTL = 150  # seconds = 5 minutes
 
 def cached_models_list(namespace=HF_NAMESPACE):
     now = time.time()
@@ -516,7 +516,6 @@ def worker():
 
             print(f"[{time.ctime()}] Worker: Starting job {job_id}")
 
-            print(f"[{time.ctime()}] Worker: Starting job {job_id}")
             # ensure container is running
             status_cmd = "sudo docker inspect -f '{{.State.Running}}' controlnet 2>/dev/null || echo false"
             out, _ = ssh_manager.run_command(status_cmd)
@@ -557,8 +556,8 @@ def worker():
                     try:
                         ssh_manager.reconnect_if_needed()
                         ssh_manager.run_command("echo ok")
-                    except Exception as e:
-                        print(f"[{time.ctime()}] Worker: Remote machine is gone: {re}")
+                    except Exception as e2:
+                        print(f"[{time.ctime()}] Worker: Remote machine unreachable after disconnect: {e2}")
                         publish(job_id, {"status": "error", "message": "Remote machine disconnected"})
                         app.config["LAMBDA_CONNECTED"] = False
                         break
@@ -577,7 +576,7 @@ def worker():
             elapsed = int(time.time() - start_time)
 
             # Detect final outputs
-            url_match = re.search(r'https?://(?![\w.-]*wandb\.ai)\S+', output)
+            url_match = re.search(r'https://res.cloudinary.com/\S+', output)
             finished_match = re.search(r"_complete\b", output, re.IGNORECASE)
             if url_match:
                 publish(job_id, {"status": "done", "output": url_match.group(0), "elapsed": elapsed})
@@ -889,7 +888,7 @@ def preprocess_image():
             return jsonify({"status": "error", "error": _("No valid images were processed.")}), 500
 
         merged_rgb = cv2.cvtColor(merged_image, cv2.COLOR_GRAY2RGB)
-        merged_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}_merged.png")
+        merged_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}_merged.jpg")
         temp_files_to_clean.append(merged_path)
         cv2.imwrite(merged_path, merged_rgb)
 
@@ -1239,7 +1238,7 @@ def inference():
                         }});        
                         // Save on submit
                         document.querySelector("form").addEventListener("submit", function () {{
-                            const dataURL = canvas.toDataURL("image/png");
+                            const dataURL = canvas.toDataURL("image/jpg");
                             document.getElementById("controlImageData").value = dataURL;
                         }});
                     }});
