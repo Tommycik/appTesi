@@ -609,6 +609,10 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             A(_("Results"), href=url_for('results'), cls="nav-link"),
         ])
     else:
+        nav_links.extend([
+            A(_("Connect to Lambda"), href=url_for('connect_lambda'), cls="nav-link"),
+            A(_("Results"), href=url_for('results'), cls="nav-link"),
+        ])
         nav_links.append(A(_("Connect to Lambda"), href=url_for('connect_lambda'), cls="nav-link"))
 
     navigation = Nav(*nav_links, cls="nav")
@@ -795,6 +799,7 @@ def index():
               id="connectBtn",
               href=url_for('connect_lambda'),
               cls="button primary"),
+            A(_("Go to Results Page"), cls="button primary", href=url_for('results')),
             Script(f"""
                 document.getElementById("connectBtn").addEventListener("click", function(){{
                   this.innerText = "{_('Connecting...')}";
@@ -1847,11 +1852,8 @@ def training():
     return str(base_layout(_("Training"), form)), 200
 
 @app.route('/results', methods=["GET"])
-@require_lambda
 def results():
     is_connected = session.get('lambda_connected', False)
-    if not is_connected:
-        return redirect(url_for('index'))
 
     models = cached_models_list()
     selected_model = request.args.get("model", "all")
