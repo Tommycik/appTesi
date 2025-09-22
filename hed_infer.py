@@ -170,7 +170,7 @@ def hed_from_path(input_path, output_path=None):
     import cv2
 
     # 1. Quantize to discrete grayscale levels
-    levels = 128  # 4, 8, 16 or 32 depending on detail vs. stability
+    levels = 128
     step = 255 // levels
     out_img = (out_img // step) * step
 
@@ -184,7 +184,7 @@ def hed_from_path(input_path, output_path=None):
 
     if not output_path:
         root, _ = os.path.splitext(input_path)
-        # consistent PNG jpg
+        # consistent jpg jpg
         output_path = f"{root}_hed.jpg"
 
     PIL.Image.fromarray(out_img, mode="RGB").save(output_path, format="JPEG")
