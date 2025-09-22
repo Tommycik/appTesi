@@ -1107,9 +1107,9 @@ def inference():
                           const scale = document.querySelector('input[name="scale"]');
                           const steps = document.querySelector('input[name="steps"]');
                           const guidance = document.querySelector('input[name="guidance"]');
-                          if (scale)   scale.addEventListener('change',   ()=>san(scale,   0.2, false));
-                          if (steps)   steps.addEventListener('change',   ()=>san(steps,     50, true));
-                          if (guidance)guidance.addEventListener('change',()=>san(guidance, 6.0, false));
+                          if (scale)   scale.addEventListener('change',   ()=>san(scale,   0.7, false));
+                          if (steps)   steps.addEventListener('change',   ()=>san(steps,     35, true));
+                          if (guidance)guidance.addEventListener('change',()=>san(guidance, 6.5, false));
 
                           // text guards (prompt)
                           function cleanText(el, d){{
@@ -1484,7 +1484,7 @@ def training():
         return str(base_layout(_("Waiting for Training"), content)), 200
 
     # GET: form
-    # build options WITHOUT calling cached_model_info for every model, lazy download
+    # build options without calling cached_model_info for every model, lazy download
 
     models = cached_models_list()
     options = [Option(m["id"].split("/")[-1], value=m["id"]) for m in models]
@@ -1888,10 +1888,10 @@ def results():
 
     # all models
     if selected_model == "all":
-        required = page * per_page  # we need at least this many items across all models to render page and know if next exists
+        required = page * per_page
         combined = []
 
-        # fetch up to `required` items from each model (small number unless page is large)
+        # fetch up to required items from each model
         for m in models:
             model_name = m["id"].split("/")[-1]
             prefix = f"{HF_NAMESPACE}/{model_name}_results/repo_image/"
@@ -1903,7 +1903,7 @@ def results():
 
         # sort combined by created_at if present, otherwise by public_id
         def sort_key(r):
-            # created_at often ISO string; falling back to public_id keeps deterministic ordering
+
             return r.get("created_at") or r.get("public_id") or ""
 
         combined_sorted = sorted(combined, key=sort_key, reverse=True)
