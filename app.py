@@ -668,11 +668,6 @@ def require_lambda(f):
         return f(*args, **kwargs)
     return wrapper
 
-@app.route("/model_info/<path:model_id>")
-def model_info(model_id):
-    info = cached_model_info(model_id)
-    return jsonify(info)
-
 @app.route('/set_lang/<lang>')
 def set_language(lang):
     if lang in ['en', 'it']:
@@ -1331,6 +1326,10 @@ def training():
             resolution = sanitize_number(request.form.get("resolution", "512"), 512,  True)
             if resolution and int(resolution) > 512:
                 resolution = 512
+            if resolution:
+                nearest = int(round(resolution / 8.0) * 8)
+                # avoid 0
+                resolution = max(8, nearest)
         checkpointing_steps = None
         if "checkpointing_steps" in request.form:
             checkpointing_steps = sanitize_number(request.form.get("checkpointing_steps", "250"), 250, True)

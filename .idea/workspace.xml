@@ -9,6 +9,7 @@
   <component name="ChangeListManager">
     <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="risolto bug generazione immagine di controllo">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -195,30 +196,7 @@
       <workItem from="1758360855141" duration="14745000" />
       <workItem from="1758399609238" duration="10344000" />
       <workItem from="1758473354378" duration="17280000" />
-    </task>
-    <task id="LOCAL-00060" summary="risoluzione immagini e uso di screen per riconnessione">
-      <option name="closed" value="true" />
-      <created>1757029071727</created>
-      <option name="number" value="00060" />
-      <option name="presentableId" value="LOCAL-00060" />
-      <option name="project" value="LOCAL" />
-      <updated>1757029071727</updated>
-    </task>
-    <task id="LOCAL-00061" summary="risoluzione immagini e uso di screen per riconnessione">
-      <option name="closed" value="true" />
-      <created>1757110453914</created>
-      <option name="number" value="00061" />
-      <option name="presentableId" value="LOCAL-00061" />
-      <option name="project" value="LOCAL" />
-      <updated>1757110453914</updated>
-    </task>
-    <task id="LOCAL-00062" summary="risolto bug screen">
-      <option name="closed" value="true" />
-      <created>1757111995781</created>
-      <option name="number" value="00062" />
-      <option name="presentableId" value="LOCAL-00062" />
-      <option name="project" value="LOCAL" />
-      <updated>1757111995782</updated>
+      <workItem from="1758530020773" duration="10743000" />
     </task>
     <task id="LOCAL-00063" summary="risolto bug screen">
       <option name="closed" value="true" />
@@ -588,7 +566,31 @@
       <option name="project" value="LOCAL" />
       <updated>1758500123202</updated>
     </task>
-    <option name="localTasksCounter" value="109" />
+    <task id="LOCAL-00109" summary="risolto bug generazione immagine di controllo">
+      <option name="closed" value="true" />
+      <created>1758531636077</created>
+      <option name="number" value="00109" />
+      <option name="presentableId" value="LOCAL-00109" />
+      <option name="project" value="LOCAL" />
+      <updated>1758531636077</updated>
+    </task>
+    <task id="LOCAL-00110" summary="risolto bug generazione immagine di controllo">
+      <option name="closed" value="true" />
+      <created>1758532262741</created>
+      <option name="number" value="00110" />
+      <option name="presentableId" value="LOCAL-00110" />
+      <option name="project" value="LOCAL" />
+      <updated>1758532262741</updated>
+    </task>
+    <task id="LOCAL-00111" summary="risolto bug generazione immagine di controllo">
+      <option name="closed" value="true" />
+      <created>1758533452051</created>
+      <option name="number" value="00111" />
+      <option name="presentableId" value="LOCAL-00111" />
+      <option name="project" value="LOCAL" />
+      <updated>1758533452051</updated>
+    </task>
+    <option name="localTasksCounter" value="112" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -646,7 +648,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
-    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1758500131323" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/appTesi$appTesi.coverage" NAME="appTesi Coverage Results" MODIFIED="1758543303762" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$testEnv.coverage" NAME="testEnv Coverage Results" MODIFIED="1754212302482" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/appTesi$Flask__app_py_.coverage" NAME="Flask (app.py) Coverage Results" MODIFIED="1754219779563" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
