@@ -7,10 +7,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="risolto bug generazione immagine di controllo">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-    </list>
+    <list default="true" id="d50bbacd-7c59-40ee-843a-11e56ef19278" name="Changes" comment="test" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -197,14 +194,6 @@
       <workItem from="1758399609238" duration="10344000" />
       <workItem from="1758473354378" duration="17280000" />
       <workItem from="1758530020773" duration="10743000" />
-    </task>
-    <task id="LOCAL-00063" summary="risolto bug screen">
-      <option name="closed" value="true" />
-      <created>1757112438569</created>
-      <option name="number" value="00063" />
-      <option name="presentableId" value="LOCAL-00063" />
-      <option name="project" value="LOCAL" />
-      <updated>1757112438569</updated>
     </task>
     <task id="LOCAL-00064" summary="risolto bug screen">
       <option name="closed" value="true" />
@@ -590,7 +579,15 @@
       <option name="project" value="LOCAL" />
       <updated>1758533452051</updated>
     </task>
-    <option name="localTasksCounter" value="112" />
+    <task id="LOCAL-00112" summary="test">
+      <option name="closed" value="true" />
+      <created>1758556734760</created>
+      <option name="number" value="00112" />
+      <option name="presentableId" value="LOCAL-00112" />
+      <option name="project" value="LOCAL" />
+      <updated>1758556734760</updated>
+    </task>
+    <option name="localTasksCounter" value="113" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -619,7 +616,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="inference" />
     <MESSAGE value="inference and serializing" />
     <MESSAGE value="conversione immagine caricata e modifica o creazione immagine di controllo" />
     <MESSAGE value="training" />
@@ -644,7 +640,8 @@
     <MESSAGE value="Pulizia codice" />
     <MESSAGE value=" correzione pagina risultati" />
     <MESSAGE value="risolto bug generazione immagine di controllo" />
-    <option name="LAST_COMMIT_MESSAGE" value="risolto bug generazione immagine di controllo" />
+    <MESSAGE value="test" />
+    <option name="LAST_COMMIT_MESSAGE" value="test" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/appTesi$Flask__app2_py_.coverage" NAME="Flask (app2.py) Coverage Results" MODIFIED="1753803774137" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />

@@ -613,7 +613,6 @@ def base_layout(title: str, content: Any, extra_scripts: list[str] = None):
             A(_("Connect to Lambda"), href=url_for('connect_lambda'), cls="nav-link"),
             A(_("Results"), href=url_for('results'), cls="nav-link"),
         ])
-        nav_links.append(A(_("Connect to Lambda"), href=url_for('connect_lambda'), cls="nav-link"))
 
     navigation = Nav(*nav_links, cls="nav")
     current_lang = session.get('lang', 'en')
