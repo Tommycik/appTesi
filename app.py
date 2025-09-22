@@ -581,7 +581,7 @@ def worker():
             if url_match:
                 publish(job_id, {"status": "done", "output": url_match.group(0), "elapsed": elapsed})
             elif finished_match:
-                publish(job_id, {"status": "done", "message": "done", "elapsed": elapsed})
+                publish(job_id, {"status": "done", "output": "done", "elapsed": elapsed})
             elif errors:
                 publish(job_id, {"status": "error", "message": errors, "elapsed": elapsed})
             else:
