@@ -994,6 +994,9 @@ def inference():
             H2(_("Inference Job Submitted"), id="job-status"),
             P(_("Model: %(model)s", model=model_id)),
             P(_("Prompt: %(prompt)s", prompt=prompt)),
+            P(_("Scale: ") + str(scale)),
+            P(_("Guidance: ") + str(guidance)),
+            P(_("Steps: ") + str(steps)),
             P(_("Job ID: %(jobid)s", jobid=job_id)),
             P(_("Elapsed time"), style="display:none;", id="time"),
             Div(
