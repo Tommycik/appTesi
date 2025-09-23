@@ -1075,8 +1075,8 @@ def inference():
         Fieldset(
             Legend(_("Parameters")),
             Div(
-                Label(_("Scale:")), Input(type="number", name="scale", step="0.1", value="0.7"),
-                Label(_("Steps:")), Input(type="number", name="steps", value="35"),
+                Label(_("Scale:")), Input(type="number", name="scale", step="0.1", value="0.6"),
+                Label(_("Steps:")), Input(type="number", name="steps", value="30"),
                 Label(_("Guidance:")), Input(type="number", name="guidance", step="0.5", value="6.5"),
                 cls="form-row"
             )
@@ -1109,8 +1109,8 @@ def inference():
                           const scale = document.querySelector('input[name="scale"]');
                           const steps = document.querySelector('input[name="steps"]');
                           const guidance = document.querySelector('input[name="guidance"]');
-                          if (scale)   scale.addEventListener('change',   ()=>san(scale,   0.7, false));
-                          if (steps)   steps.addEventListener('change',   ()=>san(steps,     35, true));
+                          if (scale)   scale.addEventListener('change',   ()=>san(scale,   0.6, false));
+                          if (steps)   steps.addEventListener('change',   ()=>san(steps,     30, true));
                           if (guidance)guidance.addEventListener('change',()=>san(guidance, 6.5, false));
 
                           // text guards (prompt)
